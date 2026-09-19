@@ -18,7 +18,7 @@ mongoose.connect(process.env.MONGO_URI)
 
 // Routes
 app.get('/', (req, res) => res.json({ message: 'RSPF API running 🚀' }));
-app.use('/api/auth', authRoutes);
+app.use('/api/admin', authRoutes);
 app.get('/api/profile', authMiddleware, (req, res) => {
   res.json({ user: req.user });
 });

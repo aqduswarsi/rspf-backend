@@ -1,22 +1,22 @@
-const express = require('express');
-const bcrypt = require('bcryptjs');
-const jwt = require('jsonwebtoken');
-const Admin = require('../models/Admin');
+const express = require("express");
+const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const Admin = require("../models/Admin");
 
 const router = express.Router();
 
-// ==================== REGISTER ADMIN ====================
-router.post('/register', async (req, res) => {
+// REGISTER ADMIN
+router.post("/register", async (req, res) => {
   try {
     const { name, email, password } = req.body;
 
     if (!name || !email || !password) {
-      return res.status(400).json({ message: 'All fields required' });
+      return res.status(400).json({ message: "All fields required" });
     }
 
     const existing = await Admin.findOne({ email });
     if (existing) {
-      return res.status(400).json({ message: 'Email already registered' });
+      return res.status(400).json({ message: "Email already registered" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -25,11 +25,11 @@ router.post('/register', async (req, res) => {
       name,
       email,
       password: hashedPassword,
-      role: 'admin',
+      role: "admin",
     });
 
     res.status(201).json({
-      message: 'Admin registered successfully ✅',
+      message: "Admin registered successfully ✅",
       admin: {
         id: admin._id,
         name: admin.name,
@@ -38,37 +38,37 @@ router.post('/register', async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 
-// ==================== LOGIN ADMIN ====================
-router.post('/login', async (req, res) => {
+// LOGIN ADMIN
+router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
     if (!email || !password) {
-      return res.status(400).json({ message: 'Email and password required' });
+      return res.status(400).json({ message: "Email and password required" });
     }
 
     const admin = await Admin.findOne({ email });
     if (!admin) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
     const isMatch = await bcrypt.compare(password, admin.password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(400).json({ message: "Invalid credentials" });
     }
 
     const token = jwt.sign(
       { userId: admin._id, email: admin.email, role: admin.role },
       process.env.JWT_SECRET,
-      { expiresIn: '7d' }
+      { expiresIn: "7d" },
     );
 
     res.status(200).json({
-      message: 'Admin login successful ✅',
+      message: "Admin login successful ✅",
       token,
       admin: {
         id: admin._id,
@@ -78,7 +78,7 @@ router.post('/login', async (req, res) => {
       },
     });
   } catch (err) {
-    res.status(500).json({ message: 'Server error', error: err.message });
+    res.status(500).json({ message: "Server error", error: err.message });
   }
 });
 

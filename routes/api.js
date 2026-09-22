@@ -366,4 +366,57 @@ router.post("/user/login", async (req, res) => {
   }
 });
 
+// =========================================================
+//                  USER PROFILE (own data)
+// =========================================================
+
+router.get("/user/profile", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can access this" });
+    }
+
+    const user = await BioData.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json(user);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.put("/user/profile", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can update this" });
+    }
+
+    const allowed = [
+      "mobileNumber",
+      "alternateMobile",
+      "email",
+      "presentAddress",
+      "permanentAddress",
+      "photo",
+    ];
+
+    const updates = {};
+    allowed.forEach((key) => {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    });
+
+    const user = await BioData.findByIdAndUpdate(
+      req.user.userId,
+      updates,
+      { new: true }
+    );
+
+    res.json({ message: "Profile updated ✅", user });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 module.exports = router;

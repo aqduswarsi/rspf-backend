@@ -307,4 +307,63 @@ router.get("/stats", authMiddleware, async (req, res) => {
   }
 });
 
+// =========================================================
+//                  USER LOGIN (Phone + DOB)
+// =========================================================
+
+router.post("/user/login", async (req, res) => {
+  try {
+    const { phone, password } = req.body;
+
+    if (!phone || !password) {
+      return res.status(400).json({ message: "Phone and password required" });
+    }
+
+    const user = await BioData.findOne({ mobileNumber: phone });
+    if (!user) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    if (user.status === "blocked") {
+      return res.status(403).json({ message: "Account blocked. Contact admin." });
+    }
+
+    if (user.status !== "verified") {
+      return res.status(403).json({ message: "Account not verified yet." });
+    }
+
+    const dob = user.dateOfBirth || "";
+    const parts = dob.split("-");
+    const expectedPassword =
+      parts.length === 3 ? `${parts[2]}${parts[1]}${parts[0]}` : "";
+
+    if (!expectedPassword || password !== expectedPassword) {
+      return res.status(400).json({ message: "Invalid credentials" });
+    }
+
+    const token = jwt.sign(
+      { userId: user._id, phone: user.mobileNumber, name: user.nameEnglish, role: "user" },
+      process.env.JWT_SECRET,
+      { expiresIn: "30d" }
+    );
+
+    res.json({
+      message: "Login successful ✅",
+      token,
+      user: {
+        id: user._id,
+        name: user.nameEnglish,
+        phone: user.mobileNumber,
+        email: user.email,
+        rank: user.rank,
+        zone: user.zone,
+        status: user.status,
+        photo: user.photo,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 module.exports = router;

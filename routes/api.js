@@ -64,7 +64,6 @@ router.post("/admin/login", async (req, res) => {
     const admin = await Admin.findOne({ email });
     if (!admin) return res.status(400).json({ message: "Invalid credentials" });
 
-    // Only block if explicitly false (purana document me isActive undefined hoga)
     if (admin.isActive === false) {
       return res.status(403).json({ message: "Account disabled" });
     }
@@ -72,7 +71,6 @@ router.post("/admin/login", async (req, res) => {
     const match = await bcrypt.compare(password, admin.password);
     if (!match) return res.status(400).json({ message: "Invalid credentials" });
 
-    // Update last login
     admin.lastLogin = new Date();
     admin.lastLoginIP = req.ip || "";
     await admin.save();
@@ -325,7 +323,9 @@ router.post("/user/login", async (req, res) => {
     }
 
     if (user.status === "blocked") {
-      return res.status(403).json({ message: "Account blocked. Contact admin." });
+      return res
+        .status(403)
+        .json({ message: "Account blocked. Contact admin." });
     }
 
     if (user.status !== "verified") {
@@ -342,9 +342,14 @@ router.post("/user/login", async (req, res) => {
     }
 
     const token = jwt.sign(
-      { userId: user._id, phone: user.mobileNumber, name: user.nameEnglish, role: "user" },
+      {
+        userId: user._id,
+        phone: user.mobileNumber,
+        name: user.nameEnglish,
+        role: "user",
+      },
       process.env.JWT_SECRET,
-      { expiresIn: "30d" }
+      { expiresIn: "30d" },
     );
 
     res.json({
@@ -394,12 +399,32 @@ router.put("/user/profile", authMiddleware, async (req, res) => {
     }
 
     const allowed = [
+      // Photo
+      "photo",
+      // Name & Parents
+      "nameEnglish",
+      "nameHindi",
+      "fatherNameEnglish",
+      "fatherNameHindi",
+      "motherNameEnglish",
+      "motherNameHindi",
+      // Contact
       "mobileNumber",
       "alternateMobile",
+      "mobileWhatsapp",
+      "alternateWhatsapp",
       "email",
+      // Address
       "presentAddress",
+      "presentPinCode",
       "permanentAddress",
-      "photo",
+      "permanentPinCode",
+      "state",
+      // Other
+      "bloodGroup",
+      "religion",
+      "category",
+      "caste",
     ];
 
     const updates = {};
@@ -407,13 +432,59 @@ router.put("/user/profile", authMiddleware, async (req, res) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     });
 
-    const user = await BioData.findByIdAndUpdate(
-      req.user.userId,
-      updates,
-      { new: true }
-    );
+    const user = await BioData.findByIdAndUpdate(req.user.userId, updates, {
+      new: true,
+    });
 
     res.json({ message: "Profile updated ✅", user });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  USER CHANGE PASSWORD
+// =========================================================
+
+router.put("/user/change-password", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can access this" });
+    }
+
+    const { oldPassword, newPassword } = req.body;
+
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "Old and new password required" });
+    }
+
+    if (newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "New password must be at least 6 characters" });
+    }
+
+    const user = await BioData.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Old password = DOB (ddmmyyyy) check
+    const dob = user.dateOfBirth || "";
+    const parts = dob.split("-");
+    const expectedPassword =
+      parts.length === 3 ? `${parts[2]}${parts[1]}${parts[0]}` : "";
+
+    if (oldPassword !== expectedPassword) {
+      return res.status(400).json({ message: "Old password wrong" });
+    }
+
+    // Currently password is fixed as DOB — no custom password field in schema
+    // So we return informative message
+    res.json({
+      message:
+        "ℹ️ Your password is fixed as DOB (ddmmyyyy). Contact admin to change it.",
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

@@ -1,25 +1,31 @@
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
-require('dotenv').config();
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+require("dotenv").config();
 
-const authRoutes = require('./routes/auth');
-const authMiddleware = require('./middleware/authMiddleware');
+const apiRoutes = require("./routes/api");
+const authMiddleware = require("./middleware/authMiddleware");
 
 const app = express();
 
-app.use(cors({ origin: '*' }));
-app.use(express.json());
+app.use(cors({ origin: "*" }));
+app.use(express.json({ limit: "5mb" })); // 📸 photo base64 ke liye limit badhaya
 
 // MongoDB Atlas Connect
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log('✅ MongoDB Atlas Connected'))
-  .catch((err) => console.log('❌ MongoDB Error:', err.message));
+mongoose
+  .connect(process.env.MONGO_URI)
+  .then(() => console.log("✅ MongoDB Atlas Connected"))
+  .catch((err) => console.log("❌ MongoDB Error:", err.message));
 
-// Routes
-app.get('/', (req, res) => res.json({ message: 'RSPF API running 🚀' }));
-app.use('/api/admin', authRoutes);
-app.get('/api/profile', authMiddleware, (req, res) => {
+// ==================== ROUTES ====================
+// Health check
+app.get("/", (req, res) => res.json({ message: "RSPF API running 🚀" }));
+
+// ⭐ SAARE ROUTES EK HI FILE SE
+app.use("/api", apiRoutes);
+
+// Profile (protected route test ke liye)
+app.get("/api/profile", authMiddleware, (req, res) => {
   res.json({ user: req.user });
 });
 

@@ -6,6 +6,10 @@ const Admin = require("../models/Admin");
 const BioData = require("../models/BioData");
 const authMiddleware = require("../middleware/authMiddleware");
 
+const Event = require("../models/Event");
+const News = require("../models/News");
+const Gallery = require("../models/Gallery");
+
 const router = express.Router();
 
 // =========================================================
@@ -485,6 +489,156 @@ router.put("/user/change-password", authMiddleware, async (req, res) => {
       message:
         "ℹ️ Your password is fixed as DOB (ddmmyyyy). Contact admin to change it.",
     });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  EVENT ROUTES
+// =========================================================
+
+// CREATE EVENT
+router.post("/events", authMiddleware, async (req, res) => {
+  try {
+    const event = await Event.create(req.body);
+    res.status(201).json({
+      message: "Event added successfully ✅",
+      data: event,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL EVENTS
+router.get("/events", async (req, res) => {
+  try {
+    const events = await Event.find().sort({ createdAt: -1 });
+    res.json(events);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE EVENT
+router.put("/events/:id", authMiddleware, async (req, res) => {
+  try {
+    const event = await Event.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+    if (!event) return res.status(404).json({ message: "Event not found" });
+    res.json({ message: "Event updated ✅", data: event });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE EVENT
+router.delete("/events/:id", authMiddleware, async (req, res) => {
+  try {
+    await Event.findByIdAndDelete(req.params.id);
+    res.json({ message: "Event deleted ✅" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  NEWS ROUTES
+// =========================================================
+
+// CREATE NEWS
+router.post("/news", authMiddleware, async (req, res) => {
+  try {
+    const news = await News.create(req.body);
+    res.status(201).json({
+      message: "News added successfully ✅",
+      data: news,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL NEWS
+router.get("/news", async (req, res) => {
+  try {
+    const newsList = await News.find().sort({ createdAt: -1 });
+    res.json(newsList);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE NEWS
+router.put("/news/:id", authMiddleware, async (req, res) => {
+  try {
+    const news = await News.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+    if (!news) return res.status(404).json({ message: "News not found" });
+    res.json({ message: "News updated ✅", data: news });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE NEWS
+router.delete("/news/:id", authMiddleware, async (req, res) => {
+  try {
+    await News.findByIdAndDelete(req.params.id);
+    res.json({ message: "News deleted ✅" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  GALLERY ROUTES
+// =========================================================
+
+// CREATE GALLERY IMAGE
+router.post("/gallery", authMiddleware, async (req, res) => {
+  try {
+    const gallery = await Gallery.create(req.body);
+    res.status(201).json({
+      message: "Image added to gallery ✅",
+      data: gallery,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL GALLERY
+router.get("/gallery", async (req, res) => {
+  try {
+    const gallery = await Gallery.find().sort({ createdAt: -1 });
+    res.json(gallery);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE GALLERY
+router.put("/gallery/:id", authMiddleware, async (req, res) => {
+  try {
+    const gallery = await Gallery.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+    });
+    if (!gallery) return res.status(404).json({ message: "Image not found" });
+    res.json({ message: "Image updated ✅", data: gallery });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE GALLERY IMAGE
+router.delete("/gallery/:id", authMiddleware, async (req, res) => {
+  try {
+    await Gallery.findByIdAndDelete(req.params.id);
+    res.json({ message: "Image deleted ✅" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

@@ -644,4 +644,51 @@ router.delete("/gallery/:id", authMiddleware, async (req, res) => {
   }
 });
 
+// =========================================================
+//              PUBLIC REGISTRATION (No Auth Required)
+// =========================================================
+
+router.post("/public/register", async (req, res) => {
+  try {
+    const { nameEnglish, mobileNumber, declarationAccepted } = req.body;
+
+    // Basic validation
+    if (!nameEnglish || !mobileNumber) {
+      return res.status(400).json({
+        message: "Name and Mobile Number are required",
+      });
+    }
+
+    if (!declarationAccepted) {
+      return res.status(400).json({
+        message: "Please accept the Declaration",
+      });
+    }
+
+    // Check duplicate mobile
+    const existing = await BioData.findOne({ mobileNumber });
+    if (existing) {
+      return res.status(400).json({
+        message: "This mobile number is already registered",
+      });
+    }
+
+    // Create with status unverified
+    const bioData = await BioData.create({
+      ...req.body,
+      status: "unverified",
+    });
+
+    res.status(201).json({
+      message: "Registration successful! Please wait for admin verification.",
+      data: {
+        id: bioData._id,
+        nameEnglish: bioData.nameEnglish,
+        mobileNumber: bioData.mobileNumber,
+      },
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
 module.exports = router;

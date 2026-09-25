@@ -174,12 +174,17 @@ router.delete("/admin/:id", authMiddleware, async (req, res) => {
 //                  BIO DATA ROUTES
 // =========================================================
 
-// ---------- CREATE BIO DATA ----------
+// ---------- CREATE BIO DATA (Admin only — verified) ----------
 router.post("/users", authMiddleware, async (req, res) => {
   try {
-    const bioData = await BioData.create(req.body);
+    const bioData = await BioData.create({
+      ...req.body,
+      status: "verified",          // ← Admin बनाए तो directly verified
+      verifiedBy: req.user.email || "admin",
+      verifiedAt: new Date(),
+    });
     res.status(201).json({
-      message: "BIO Data submitted successfully ✅",
+      message: "BIO Data added successfully ✅",
       data: bioData,
     });
   } catch (err) {
@@ -691,4 +696,5 @@ router.post("/public/register", async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+
 module.exports = router;

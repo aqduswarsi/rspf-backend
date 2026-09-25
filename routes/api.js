@@ -138,12 +138,26 @@ router.put("/admin/profile", authMiddleware, async (req, res) => {
 // ---------- CHANGE PASSWORD ----------
 router.put("/admin/change-password", authMiddleware, async (req, res) => {
   try {
-    const { oldPassword, newPassword } = req.body;
+    const { newPassword, confirmPassword } = req.body;
+
+    if (!newPassword || !confirmPassword) {
+      return res
+        .status(400)
+        .json({ message: "New password and confirm password required" });
+    }
+
+    if (newPassword !== confirmPassword) {
+      return res.status(400).json({ message: "Passwords do not match" });
+    }
+
+    if (newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "Password must be at least 6 characters" });
+    }
+
     const admin = await Admin.findById(req.user.userId);
     if (!admin) return res.status(404).json({ message: "Admin not found" });
-
-    const match = await bcrypt.compare(oldPassword, admin.password);
-    if (!match) return res.status(400).json({ message: "Old password wrong" });
 
     admin.password = await bcrypt.hash(newPassword, 10);
     await admin.save();

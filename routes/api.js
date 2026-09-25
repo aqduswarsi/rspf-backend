@@ -14,6 +14,7 @@ const Subject = require("../models/Subject");
 const Lesson = require("../models/Lesson");
 const Question = require("../models/Question");
 const ExamResult = require("../models/ExamResult");
+const SupportTicket = require("../models/SupportTicket");
 
 const router = express.Router();
 
@@ -1439,5 +1440,93 @@ router.delete("/education/exam/results/:id", authMiddleware, async (req, res) =>
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+
+// =========================================================
+//                  SUPPORT TICKET ROUTES
+// =========================================================
+
+// CREATE TICKET (User)
+router.post("/support/tickets", authMiddleware, async (req, res) => {
+  try {
+    const { userId, question } = req.body;
+
+    if (!userId || !question || !question.trim()) {
+      return res
+        .status(400)
+        .json({ message: "User and question are required" });
+    }
+
+    const ticket = await SupportTicket.create({
+      userId,
+      question: question.trim(),
+    });
+
+    res.status(201).json({
+      message: "Ticket submitted successfully ✅",
+      data: ticket,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST TICKETS (Admin) — ?status=pending|answered | ?userId=xyz
+router.get("/support/tickets", authMiddleware, async (req, res) => {
+  try {
+    const { status, userId } = req.query;
+
+    const filter = {};
+    if (status) filter.status = status;
+    if (userId) filter.userId = userId;
+
+    const tickets = await SupportTicket.find(filter)
+      .populate("userId", "nameEnglish rollNumber mobileNumber")
+      .sort({ createdAt: -1 });
+
+    res.json(tickets);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// REPLY TO TICKET (Admin)
+router.put("/support/tickets/:id", authMiddleware, async (req, res) => {
+  try {
+    const { answer } = req.body;
+
+    if (!answer || !answer.trim()) {
+      return res.status(400).json({ message: "Answer is required" });
+    }
+
+    const ticket = await SupportTicket.findByIdAndUpdate(
+      req.params.id,
+      {
+        answer: answer.trim(),
+        status: "answered",
+        repliedBy: req.user.email || "admin",
+        repliedAt: new Date(),
+      },
+      { new: true }
+    ).populate("userId", "nameEnglish rollNumber mobileNumber");
+
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+
+    res.json({ message: "Ticket replied ✅", data: ticket });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE TICKET (Admin)
+router.delete("/support/tickets/:id", authMiddleware, async (req, res) => {
+  try {
+    const ticket = await SupportTicket.findByIdAndDelete(req.params.id);
+    if (!ticket) return res.status(404).json({ message: "Ticket not found" });
+    res.json({ message: "Ticket deleted ✅" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 
 module.exports = router;

@@ -891,7 +891,11 @@ router.delete("/education/subjects/:id", authMiddleware, async (req, res) => {
 // CREATE LESSON (Admin only)
 router.post("/education/lessons", authMiddleware, async (req, res) => {
   try {
-    const { content, courseId, subjectId } = req.body;
+    const { title, content, courseId, subjectId } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ message: "Title is required" });
+    }
 
     if (!content || !content.trim()) {
       return res.status(400).json({ message: "Content is required" });
@@ -924,6 +928,7 @@ router.post("/education/lessons", authMiddleware, async (req, res) => {
     }
 
     const lesson = await Lesson.create({
+      title: title.trim(),
       content,
       courseId,
       subjectId,
@@ -966,9 +971,10 @@ router.get("/education/lessons", async (req, res) => {
 // UPDATE LESSON (Admin only)
 router.put("/education/lessons/:id", authMiddleware, async (req, res) => {
   try {
-    const { content, courseId, subjectId } = req.body;
+    const { title, content, courseId, subjectId } = req.body;
 
     const updateData = {};
+    if (title !== undefined) updateData.title = title.trim();
     if (content !== undefined) updateData.content = content;
     if (courseId !== undefined) updateData.courseId = courseId;
     if (subjectId !== undefined) updateData.subjectId = subjectId;

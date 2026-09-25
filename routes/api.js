@@ -1004,4 +1004,192 @@ router.delete("/education/lessons/:id", authMiddleware, async (req, res) => {
   }
 });
 
+// =========================================================
+//                  EXAM QUESTION ROUTES
+// =========================================================
+
+// CREATE QUESTION (Admin only)
+router.post("/education/exam/questions", authMiddleware, async (req, res) => {
+  try {
+    const { question, type, options, correctAnswer, courseId, subjectId } =
+      req.body;
+
+    // Validation
+    if (!question || !question.trim()) {
+      return res.status(400).json({ message: "Question is required" });
+    }
+
+    const validTypes = ["MCQ", "Fill in the Blank", "True / False", "Written"];
+    if (!type || !validTypes.includes(type)) {
+      return res.status(400).json({ message: "Valid question type is required" });
+    }
+
+    if (!courseId) {
+      return res.status(400).json({ message: "Course is required" });
+    }
+
+    if (!subjectId) {
+      return res.status(400).json({ message: "Subject is required" });
+    }
+
+    // Verify course exists
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // Verify subject exists and belongs to course
+    const subject = await Subject.findById(subjectId);
+    if (!subject) {
+      return res.status(404).json({ message: "Subject not found" });
+    }
+
+    if (subject.courseId.toString() !== courseId.toString()) {
+      return res
+        .status(400)
+        .json({ message: "Subject does not belong to this course" });
+    }
+
+    // Type-specific validation
+    let finalOptions = [];
+    let finalAnswer = "";
+
+    if (type === "MCQ") {
+      if (!Array.isArray(options) || options.length < 2) {
+        return res
+          .status(400)
+          .json({ message: "MCQ requires at least 2 options" });
+      }
+      if (!correctAnswer || !correctAnswer.trim()) {
+        return res
+          .status(400)
+          .json({ message: "Correct answer is required for MCQ" });
+      }
+      finalOptions = options;
+      finalAnswer = correctAnswer.trim();
+    } else if (type === "Fill in the Blank") {
+      if (!correctAnswer || !correctAnswer.trim()) {
+        return res
+          .status(400)
+          .json({ message: "Correct answer is required" });
+      }
+      finalAnswer = correctAnswer.trim();
+    } else if (type === "True / False") {
+      if (!["True", "False"].includes(correctAnswer)) {
+        return res
+          .status(400)
+          .json({ message: "Correct answer must be 'True' or 'False'" });
+      }
+      finalAnswer = correctAnswer;
+    } else if (type === "Written") {
+      finalAnswer = ""; // No correct answer for Written
+    }
+
+    const newQuestion = await Question.create({
+      question: question.trim(),
+      type,
+      options: finalOptions,
+      correctAnswer: finalAnswer,
+      courseId,
+      subjectId,
+    });
+
+    const populated = await Question.findById(newQuestion._id)
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    res.status(201).json({
+      message: "Question added successfully ✅",
+      data: populated,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL QUESTIONS (Public) — supports filters
+router.get("/education/exam/questions", async (req, res) => {
+  try {
+    const { courseId, subjectId, type } = req.query;
+
+    const filter = {};
+    if (courseId) filter.courseId = courseId;
+    if (subjectId) filter.subjectId = subjectId;
+    if (type) filter.type = type;
+
+    const questions = await Question.find(filter)
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .sort({ createdAt: -1 });
+
+    res.json(questions);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// GET SINGLE QUESTION (Public)
+router.get("/education/exam/questions/:id", async (req, res) => {
+  try {
+    const question = await Question.findById(req.params.id)
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    if (!question) {
+      return res.status(404).json({ message: "Question not found" });
+    }
+
+    res.json(question);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE QUESTION (Admin only)
+router.put("/education/exam/questions/:id", authMiddleware, async (req, res) => {
+  try {
+    const { question, type, options, correctAnswer, courseId, subjectId } =
+      req.body;
+
+    const updateData = {};
+    if (question !== undefined) updateData.question = question.trim();
+    if (type !== undefined) updateData.type = type;
+    if (options !== undefined) updateData.options = options;
+    if (correctAnswer !== undefined) updateData.correctAnswer = correctAnswer;
+    if (courseId !== undefined) updateData.courseId = courseId;
+    if (subjectId !== undefined) updateData.subjectId = subjectId;
+
+    const updated = await Question.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+    })
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    if (!updated) {
+      return res.status(404).json({ message: "Question not found" });
+    }
+
+    res.json({ message: "Question updated ✅", data: updated });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE QUESTION (Admin only)
+router.delete(
+  "/education/exam/questions/:id",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const question = await Question.findByIdAndDelete(req.params.id);
+      if (!question) {
+        return res.status(404).json({ message: "Question not found" });
+      }
+      res.json({ message: "Question deleted ✅" });
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
+  }
+);
+
 module.exports = router;

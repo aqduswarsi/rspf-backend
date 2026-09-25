@@ -12,6 +12,8 @@ const Gallery = require("../models/Gallery");
 const Course = require("../models/Course");
 const Subject = require("../models/Subject");
 const Lesson = require("../models/Lesson");
+const Question = require("../models/Question");
+
 
 const router = express.Router();
 

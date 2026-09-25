@@ -13,7 +13,7 @@ const Course = require("../models/Course");
 const Subject = require("../models/Subject");
 const Lesson = require("../models/Lesson");
 const Question = require("../models/Question");
-
+const ExamResult = require("../models/ExamResult");
 
 const router = express.Router();
 
@@ -1193,5 +1193,251 @@ router.delete(
     }
   }
 );
+
+// =========================================================
+//              EXAM SUBMIT (User)
+// =========================================================
+
+router.post("/education/exam/submit", authMiddleware, async (req, res) => {
+  try {
+    const { userId, courseId, subjectId, answers } = req.body;
+
+    if (!userId || !courseId || !subjectId) {
+      return res.status(400).json({ message: "Missing required fields" });
+    }
+
+    if (!Array.isArray(answers) || answers.length === 0) {
+      return res.status(400).json({ message: "Answers are required" });
+    }
+
+    // Verify user
+    const user = await BioData.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found" });
+
+    // Verify course
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    // Verify subject
+    const subject = await Subject.findById(subjectId);
+    if (!subject) return res.status(404).json({ message: "Subject not found" });
+
+    // Fetch all questions
+    const questionIds = answers.map((a) => a.questionId);
+    const questions = await Question.find({ _id: { $in: questionIds } });
+
+    if (questions.length === 0) {
+      return res.status(400).json({ message: "No valid questions found" });
+    }
+
+    let autoCorrect = 0;
+    let autoWrong = 0;
+    let writtenPending = 0;
+    let maxScore = 0;
+
+    const processedAnswers = [];
+
+    for (const ans of answers) {
+      const q = questions.find((qq) => qq._id.toString() === ans.questionId);
+      if (!q) continue;
+
+      const userAnswer = (ans.userAnswer || "").toString().trim();
+      const correctAnswer = (q.correctAnswer || "").toString().trim();
+
+      let isCorrect = false;
+      let marks = 0;
+      let reviewed = false;
+      const maxMarks = 1;
+      maxScore += maxMarks;
+
+      if (q.type === "Written") {
+        // Written — pending, admin will review
+        writtenPending++;
+        marks = 0;
+        reviewed = false;
+      } else {
+        // Auto-check (case insensitive for Fill)
+        if (q.type === "Fill in the Blank") {
+          isCorrect =
+            userAnswer.toLowerCase() === correctAnswer.toLowerCase() &&
+            userAnswer !== "";
+        } else {
+          isCorrect = userAnswer === correctAnswer;
+        }
+
+        if (isCorrect) {
+          marks = maxMarks;
+          autoCorrect++;
+        } else {
+          autoWrong++;
+        }
+        reviewed = true;
+      }
+
+      processedAnswers.push({
+        questionId: q._id,
+        questionText: q.question,
+        type: q.type,
+        userAnswer,
+        correctAnswer,
+        isCorrect,
+        marks,
+        maxMarks,
+        reviewed,
+      });
+    }
+
+    const totalScore = processedAnswers.reduce(
+      (sum, a) => sum + (a.marks || 0),
+      0
+    );
+
+    const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+
+    // Status
+    let status = "pending";
+    if (writtenPending === 0) {
+      status = percentage >= 50 ? "Pass" : "Fail";
+    }
+
+    const result = await ExamResult.create({
+      userId,
+      courseId,
+      subjectId,
+      answers: processedAnswers,
+      totalQuestions: processedAnswers.length,
+      autoCorrect,
+      autoWrong,
+      writtenPending,
+      totalScore,
+      maxScore,
+      percentage,
+      status,
+    });
+
+    const populated = await ExamResult.findById(result._id)
+      .populate("userId", "nameEnglish rollNumber mobileNumber presentAddress category")
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    res.status(201).json({
+      message: "Exam submitted successfully ✅",
+      data: populated,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//              EXAM RESULT ROUTES
+// =========================================================
+
+// LIST ALL RESULTS (Admin)
+router.get("/education/exam/results", authMiddleware, async (req, res) => {
+  try {
+    const { userId, courseId, subjectId, status, isPrinted } = req.query;
+
+    const filter = {};
+    if (userId) filter.userId = userId;
+    if (courseId) filter.courseId = courseId;
+    if (subjectId) filter.subjectId = subjectId;
+    if (status) filter.status = status;
+    if (isPrinted !== undefined) filter.isPrinted = isPrinted === "true";
+
+    const results = await ExamResult.find(filter)
+      .populate("userId", "nameEnglish rollNumber mobileNumber presentAddress category")
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .sort({ createdAt: -1 });
+
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// GET SINGLE RESULT
+router.get("/education/exam/results/:id", authMiddleware, async (req, res) => {
+  try {
+    const result = await ExamResult.findById(req.params.id)
+      .populate("userId", "nameEnglish rollNumber mobileNumber presentAddress category")
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    if (!result) return res.status(404).json({ message: "Result not found" });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE RESULT (Admin — Written marks दे, status बदले, printed mark करे)
+router.put("/education/exam/results/:id", authMiddleware, async (req, res) => {
+  try {
+    const { answers, isPrinted } = req.body;
+
+    const result = await ExamResult.findById(req.params.id);
+    if (!result) return res.status(404).json({ message: "Result not found" });
+
+    // Update Written answers marks
+    if (Array.isArray(answers)) {
+      for (const updated of answers) {
+        const existing = result.answers.find(
+          (a) => a.questionId.toString() === updated.questionId
+        );
+        if (existing && existing.type === "Written") {
+          existing.marks = updated.marks || 0;
+          existing.isCorrect = (updated.marks || 0) > 0;
+          existing.reviewed = true;
+        }
+      }
+    }
+
+    // Recalculate
+    const totalScore = result.answers.reduce((sum, a) => sum + (a.marks || 0), 0);
+    const writtenPending = result.answers.filter(
+      (a) => a.type === "Written" && !a.reviewed
+    ).length;
+
+    result.totalScore = totalScore;
+    result.writtenPending = writtenPending;
+    result.percentage =
+      result.maxScore > 0
+        ? Math.round((totalScore / result.maxScore) * 100)
+        : 0;
+
+    if (writtenPending === 0) {
+      result.status = result.percentage >= 50 ? "Pass" : "Fail";
+    }
+
+    if (isPrinted !== undefined) result.isPrinted = isPrinted;
+
+    result.reviewedBy = req.user.email || "admin";
+    result.reviewedAt = new Date();
+
+    await result.save();
+
+    const populated = await ExamResult.findById(result._id)
+      .populate("userId", "nameEnglish rollNumber mobileNumber presentAddress category")
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    res.json({ message: "Result updated ✅", data: populated });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE RESULT
+router.delete("/education/exam/results/:id", authMiddleware, async (req, res) => {
+  try {
+    const result = await ExamResult.findByIdAndDelete(req.params.id);
+    if (!result) return res.status(404).json({ message: "Result not found" });
+    res.json({ message: "Result deleted ✅" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
 
 module.exports = router;

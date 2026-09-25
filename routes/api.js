@@ -15,6 +15,7 @@ const Lesson = require("../models/Lesson");
 const Question = require("../models/Question");
 const ExamResult = require("../models/ExamResult");
 const SupportTicket = require("../models/SupportTicket");
+const ContactDetails = require("../models/ContactDetails");
 
 const router = express.Router();
 
@@ -1542,5 +1543,49 @@ router.delete("/support/tickets/:id", authMiddleware, async (req, res) => {
   }
 });
 
+// =========================================================
+//                  CONTACT DETAILS
+// =========================================================
+
+// GET (Public)
+router.get("/contact/details", async (req, res) => {
+  try {
+    let contact = await ContactDetails.findOne();
+    if (!contact) {
+      contact = { phone: "", email: "", address: "", whatsapp: "" };
+    }
+    res.json(contact);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE (Admin) — upsert (single record)
+router.put("/contact/details", authMiddleware, async (req, res) => {
+  try {
+    const { phone, email, address, whatsapp } = req.body;
+
+    let contact = await ContactDetails.findOne();
+
+    if (contact) {
+      contact.phone = phone ?? contact.phone;
+      contact.email = email ?? contact.email;
+      contact.address = address ?? contact.address;
+      contact.whatsapp = whatsapp ?? contact.whatsapp;
+      await contact.save();
+    } else {
+      contact = await ContactDetails.create({
+        phone,
+        email,
+        address,
+        whatsapp,
+      });
+    }
+
+    res.json({ message: "Contact details saved ✅", data: contact });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
 
 module.exports = router;

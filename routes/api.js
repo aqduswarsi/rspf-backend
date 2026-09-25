@@ -9,6 +9,7 @@ const authMiddleware = require("../middleware/authMiddleware");
 const Event = require("../models/Event");
 const News = require("../models/News");
 const Gallery = require("../models/Gallery");
+const Course = require("../models/Course");
 
 const router = express.Router();
 
@@ -692,6 +693,81 @@ router.post("/public/register", async (req, res) => {
         mobileNumber: bioData.mobileNumber,
       },
     });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  COURSE ROUTES
+// =========================================================
+
+// CREATE COURSE (Admin only)
+router.post("/education/courses", authMiddleware, async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Course name is required" });
+    }
+
+    // Duplicate check (case-insensitive)
+    const existing = await Course.findOne({
+      name: { $regex: `^${name.trim()}$`, $options: "i" },
+    });
+    if (existing) {
+      return res.status(400).json({ message: "Course already exists" });
+    }
+
+    const course = await Course.create({ name: name.trim() });
+    res.status(201).json({
+      message: "Course added successfully ✅",
+      data: course,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL COURSES (Public)
+router.get("/education/courses", async (req, res) => {
+  try {
+    const courses = await Course.find().sort({ createdAt: -1 });
+    res.json(courses);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE COURSE (Admin only)
+router.put("/education/courses/:id", authMiddleware, async (req, res) => {
+  try {
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Course name is required" });
+    }
+
+    const course = await Course.findByIdAndUpdate(
+      req.params.id,
+      { name: name.trim() },
+      { new: true }
+    );
+
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    res.json({ message: "Course updated ✅", data: course });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE COURSE (Admin only)
+router.delete("/education/courses/:id", authMiddleware, async (req, res) => {
+  try {
+    const course = await Course.findByIdAndDelete(req.params.id);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+    res.json({ message: "Course deleted ✅" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

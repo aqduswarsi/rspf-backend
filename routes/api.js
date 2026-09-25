@@ -11,6 +11,7 @@ const News = require("../models/News");
 const Gallery = require("../models/Gallery");
 const Course = require("../models/Course");
 const Subject = require("../models/Subject");
+const Lesson = require("../models/Lesson");
 
 const router = express.Router();
 
@@ -878,6 +879,120 @@ router.delete("/education/subjects/:id", authMiddleware, async (req, res) => {
     const subject = await Subject.findByIdAndDelete(req.params.id);
     if (!subject) return res.status(404).json({ message: "Subject not found" });
     res.json({ message: "Subject deleted ✅" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  LESSON ROUTES
+// =========================================================
+
+// CREATE LESSON (Admin only)
+router.post("/education/lessons", authMiddleware, async (req, res) => {
+  try {
+    const { content, courseId, subjectId } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ message: "Content is required" });
+    }
+
+    if (!courseId) {
+      return res.status(400).json({ message: "Course is required" });
+    }
+
+    if (!subjectId) {
+      return res.status(400).json({ message: "Subject is required" });
+    }
+
+    // Verify course exists
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // Verify subject exists and belongs to this course
+    const subject = await Subject.findById(subjectId);
+    if (!subject) {
+      return res.status(404).json({ message: "Subject not found" });
+    }
+
+    if (subject.courseId.toString() !== courseId.toString()) {
+      return res
+        .status(400)
+        .json({ message: "Subject does not belong to this course" });
+    }
+
+    const lesson = await Lesson.create({
+      content,
+      courseId,
+      subjectId,
+    });
+
+    // Populate names for response
+    const populated = await Lesson.findById(lesson._id)
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    res.status(201).json({
+      message: "Lesson added successfully ✅",
+      data: populated,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL LESSONS (Public) — supports ?courseId= & ?subjectId=
+router.get("/education/lessons", async (req, res) => {
+  try {
+    const { courseId, subjectId } = req.query;
+
+    const filter = {};
+    if (courseId) filter.courseId = courseId;
+    if (subjectId) filter.subjectId = subjectId;
+
+    const lessons = await Lesson.find(filter)
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .sort({ createdAt: -1 });
+
+    res.json(lessons);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE LESSON (Admin only)
+router.put("/education/lessons/:id", authMiddleware, async (req, res) => {
+  try {
+    const { content, courseId, subjectId } = req.body;
+
+    const updateData = {};
+    if (content !== undefined) updateData.content = content;
+    if (courseId !== undefined) updateData.courseId = courseId;
+    if (subjectId !== undefined) updateData.subjectId = subjectId;
+
+    const lesson = await Lesson.findByIdAndUpdate(req.params.id, updateData, {
+      new: true,
+    })
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    if (!lesson) return res.status(404).json({ message: "Lesson not found" });
+
+    res.json({ message: "Lesson updated ✅", data: lesson });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE LESSON (Admin only)
+router.delete("/education/lessons/:id", authMiddleware, async (req, res) => {
+  try {
+    const lesson = await Lesson.findByIdAndDelete(req.params.id);
+    if (!lesson) return res.status(404).json({ message: "Lesson not found" });
+    res.json({ message: "Lesson deleted ✅" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

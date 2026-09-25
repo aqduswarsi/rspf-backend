@@ -10,6 +10,7 @@ const Event = require("../models/Event");
 const News = require("../models/News");
 const Gallery = require("../models/Gallery");
 const Course = require("../models/Course");
+const Subject = require("../models/Subject");
 
 const router = express.Router();
 
@@ -768,6 +769,115 @@ router.delete("/education/courses/:id", authMiddleware, async (req, res) => {
     const course = await Course.findByIdAndDelete(req.params.id);
     if (!course) return res.status(404).json({ message: "Course not found" });
     res.json({ message: "Course deleted ✅" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  SUBJECT ROUTES
+// =========================================================
+
+// CREATE SUBJECT (Admin only)
+router.post("/education/subjects", authMiddleware, async (req, res) => {
+  try {
+    const { name, courseId } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Subject name is required" });
+    }
+
+    if (!courseId) {
+      return res.status(400).json({ message: "Course is required" });
+    }
+
+    // Verify course exists
+    const course = await Course.findById(courseId);
+    if (!course) {
+      return res.status(404).json({ message: "Course not found" });
+    }
+
+    // Duplicate check within same course
+    const existing = await Subject.findOne({
+      courseId,
+      name: { $regex: `^${name.trim()}$`, $options: "i" },
+    });
+    if (existing) {
+      return res
+        .status(400)
+        .json({ message: "Subject already exists in this course" });
+    }
+
+    const subject = await Subject.create({
+      name: name.trim(),
+      courseId,
+    });
+
+    // Populate course name for response
+    const populated = await Subject.findById(subject._id).populate(
+      "courseId",
+      "name"
+    );
+
+    res.status(201).json({
+      message: "Subject added successfully ✅",
+      data: populated,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL SUBJECTS (Public) — supports ?courseId=xyz filter
+router.get("/education/subjects", async (req, res) => {
+  try {
+    const { courseId } = req.query;
+
+    const filter = {};
+    if (courseId) filter.courseId = courseId;
+
+    const subjects = await Subject.find(filter)
+      .populate("courseId", "name")
+      .sort({ createdAt: -1 });
+
+    res.json(subjects);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE SUBJECT (Admin only)
+router.put("/education/subjects/:id", authMiddleware, async (req, res) => {
+  try {
+    const { name, courseId } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ message: "Subject name is required" });
+    }
+
+    const updateData = { name: name.trim() };
+    if (courseId) updateData.courseId = courseId;
+
+    const subject = await Subject.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    ).populate("courseId", "name");
+
+    if (!subject) return res.status(404).json({ message: "Subject not found" });
+
+    res.json({ message: "Subject updated ✅", data: subject });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE SUBJECT (Admin only)
+router.delete("/education/subjects/:id", authMiddleware, async (req, res) => {
+  try {
+    const subject = await Subject.findByIdAndDelete(req.params.id);
+    if (!subject) return res.status(404).json({ message: "Subject not found" });
+    res.json({ message: "Subject deleted ✅" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

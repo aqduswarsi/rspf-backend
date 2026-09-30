@@ -19,6 +19,7 @@ const bioDataSchema = new mongoose.Schema(
 
     // === 9-11. DATES ===
     dateOfBirth: String,
+    password: { type: String, default: "" }, // custom password (hashed), khaali = DOB use hoga
     dateOfEnlistment: String,
     dateOfAppointment: String,
 

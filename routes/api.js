@@ -490,45 +490,42 @@ router.put("/user/profile", authMiddleware, async (req, res) => {
 //                  USER CHANGE PASSWORD
 // =========================================================
 
-// ---------- USER: CHANGE PASSWORD ----------
 router.put("/user/change-password", authMiddleware, async (req, res) => {
   try {
-    if (req.user.role !== "user")
-      return res.status(403).json({ message: "Users only" });
-
-    const { oldPassword, newPassword, confirmPassword } = req.body;
-
-    if (!oldPassword || !newPassword || !confirmPassword)
-      return res.status(400).json({ message: "Saare fields required" });
-
-    if (newPassword !== confirmPassword)
-      return res.status(400).json({ message: "New passwords match nahi karte" });
-
-    if (newPassword.length < 6)
-      return res.status(400).json({ message: "Min 6 characters" });
-
-    const user = await BioData.findById(req.user.userId);
-    if (!user) return res.status(404).json({ message: "User not found" });
-
-    // Old password check (custom ya DOB)
-    let oldOk = false;
-    if (user.password && user.password.length > 0) {
-      oldOk = await bcrypt.compare(oldPassword, user.password);
-    } else {
-      const dob = user.dateOfBirth || "";
-      const parts = dob.split("-");
-      const expected = parts.length === 3 ? `${parts[2]}${parts[1]}${parts[0]}` : "";
-      oldOk = expected && oldPassword === expected;
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can access this" });
     }
 
-    if (!oldOk)
-      return res.status(400).json({ message: "Old password galat hai" });
+    const { oldPassword, newPassword } = req.body;
 
-    // Naya password save
-    user.password = await bcrypt.hash(newPassword, 10);
-    await user.save();
+    if (!oldPassword || !newPassword) {
+      return res.status(400).json({ message: "Old and new password required" });
+    }
 
-    res.json({ message: "✅ Password changed successfully" });
+    if (newPassword.length < 6) {
+      return res
+        .status(400)
+        .json({ message: "New password must be at least 6 characters" });
+    }
+
+    const user = await BioData.findById(req.user.userId);
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    const dob = user.dateOfBirth || "";
+    const parts = dob.split("-");
+    const expectedPassword =
+      parts.length === 3 ? `${parts[2]}${parts[1]}${parts[0]}` : "";
+
+    if (oldPassword !== expectedPassword) {
+      return res.status(400).json({ message: "Old password wrong" });
+    }
+
+    res.json({
+      message:
+        "ℹ️ Your password is fixed as DOB (ddmmyyyy). Contact admin to change it.",
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

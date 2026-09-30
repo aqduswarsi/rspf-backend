@@ -2008,4 +2008,44 @@ router.get("/user/dashboard/stats", authMiddleware, async (req, res) => {
   }
 });
 
+// =========================================================
+//                  USER: TICKETS
+// =========================================================
+
+// LIST own tickets
+router.get("/user/tickets", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user")
+      return res.status(403).json({ message: "Users only" });
+
+    const tickets = await SupportTicket.find({ userId: req.user.userId })
+      .sort({ createdAt: -1 });
+
+    res.json(tickets);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// CREATE ticket
+router.post("/user/tickets", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user")
+      return res.status(403).json({ message: "Users only" });
+
+    const { question } = req.body;
+    if (!question || !question.trim())
+      return res.status(400).json({ message: "Question required" });
+
+    const ticket = await SupportTicket.create({
+      userId: req.user.userId,        // token se
+      question: question.trim(),
+    });
+
+    res.status(201).json({ message: "Ticket submitted ✅", data: ticket });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 module.exports = router;

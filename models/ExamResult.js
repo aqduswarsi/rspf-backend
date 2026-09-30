@@ -26,6 +26,11 @@ const examResultSchema = new mongoose.Schema(
       ref: "BioData",
       required: true,
     },
+    examId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Exam",
+      default: null,
+    },
     courseId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Course",

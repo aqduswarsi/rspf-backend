@@ -439,7 +439,7 @@ router.put("/user/profile", authMiddleware, async (req, res) => {
       "motherNameEnglish",
       "motherNameHindi",
       // Contact
-      "mobileNumber",
+      // "mobileNumber",
       "alternateMobile",
       "mobileWhatsapp",
       "alternateWhatsapp",
@@ -461,6 +461,20 @@ router.put("/user/profile", authMiddleware, async (req, res) => {
     allowed.forEach((key) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     });
+
+    // Name kabhi blank na ho
+    if (updates.nameEnglish !== undefined && !updates.nameEnglish.trim()) {
+      return res.status(400).json({ message: "Name cannot be empty" });
+    }
+
+    // Pin code 6 digit check
+    for (const field of ["presentPinCode", "permanentPinCode"]) {
+      if (updates[field] && !/^\d{6}$/.test(updates[field])) {
+        return res
+          .status(400)
+          .json({ message: `${field} 6 digits ka hona chahiye` });
+      }
+    }
 
     const user = await BioData.findByIdAndUpdate(req.user.userId, updates, {
       new: true,
@@ -1583,6 +1597,347 @@ router.put("/contact/details", authMiddleware, async (req, res) => {
     }
 
     res.json({ message: "Contact details saved ✅", data: contact });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  EXAM ROUTES (NEW)
+// =========================================================
+
+const Exam = require("../models/Exam");
+
+// ---------- ADMIN: CREATE EXAM ----------
+router.post("/education/exams", authMiddleware, async (req, res) => {
+  try {
+    const {
+      title, description, courseId, subjectId,
+      duration, passPercentage, questionIds,
+    } = req.body;
+
+    if (!title || !title.trim()) {
+      return res.status(400).json({ message: "Exam title is required" });
+    }
+    if (!courseId) {
+      return res.status(400).json({ message: "Course is required" });
+    }
+    if (!subjectId) {
+      return res.status(400).json({ message: "Subject is required" });
+    }
+
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
+    const subject = await Subject.findById(subjectId);
+    if (!subject) return res.status(404).json({ message: "Subject not found" });
+
+    if (subject.courseId.toString() !== courseId.toString()) {
+      return res.status(400).json({ message: "Subject does not belong to this course" });
+    }
+
+    const exam = await Exam.create({
+      title: title.trim(),
+      description: description || "",
+      courseId,
+      subjectId,
+      duration: duration || 30,
+      passPercentage: passPercentage || 50,
+      questionIds: Array.isArray(questionIds) ? questionIds : [],
+      createdBy: req.user.email || "admin",
+    });
+
+    const populated = await Exam.findById(exam._id)
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    res.status(201).json({
+      message: "Exam created successfully ✅",
+      data: populated,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------- ADMIN: LIST EXAMS ----------
+router.get("/education/exams", authMiddleware, async (req, res) => {
+  try {
+    const { courseId, subjectId } = req.query;
+    const filter = {};
+    if (courseId) filter.courseId = courseId;
+    if (subjectId) filter.subjectId = subjectId;
+
+    const exams = await Exam.find(filter)
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .sort({ createdAt: -1 });
+
+    // Har exam ke saath question count bhi bhejo
+    const withCount = exams.map((e) => ({
+      ...e.toObject(),
+      questionCount: e.questionIds?.length || 0,
+    }));
+
+    res.json(withCount);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------- ADMIN: GET SINGLE EXAM (with full questions) ----------
+router.get("/education/exams/:id", authMiddleware, async (req, res) => {
+  try {
+    const exam = await Exam.findById(req.params.id)
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .populate("questionIds");
+
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+    res.json(exam);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------- ADMIN: UPDATE EXAM ----------
+router.put("/education/exams/:id", authMiddleware, async (req, res) => {
+  try {
+    const { title, description, duration, passPercentage, isActive } = req.body;
+
+    const updateData = {};
+    if (title !== undefined) updateData.title = title.trim();
+    if (description !== undefined) updateData.description = description;
+    if (duration !== undefined) updateData.duration = duration;
+    if (passPercentage !== undefined) updateData.passPercentage = passPercentage;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    const exam = await Exam.findByIdAndUpdate(req.params.id, updateData, { new: true })
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+    res.json({ message: "Exam updated ✅", data: exam });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------- ADMIN: DELETE EXAM ----------
+router.delete("/education/exams/:id", authMiddleware, async (req, res) => {
+  try {
+    const exam = await Exam.findByIdAndDelete(req.params.id);
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+    res.json({ message: "Exam deleted ✅" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------- ADMIN: ATTACH QUESTIONS TO EXAM ----------
+router.post("/education/exams/:id/questions", authMiddleware, async (req, res) => {
+  try {
+    const { questionIds } = req.body;
+
+    if (!Array.isArray(questionIds)) {
+      return res.status(400).json({ message: "questionIds array required" });
+    }
+
+    // Verify all questions exist
+    const found = await Question.find({ _id: { $in: questionIds } });
+    if (found.length !== questionIds.length) {
+      return res.status(400).json({ message: "Some questions not found" });
+    }
+
+    // Replace exam's questionIds (ya merge karna ho toh $addToSet)
+    const exam = await Exam.findByIdAndUpdate(
+      req.params.id,
+      { questionIds },
+      { new: true }
+    )
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .populate("questionIds");
+
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+
+    res.json({
+      message: `✅ ${questionIds.length} questions attached to exam`,
+      data: exam,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//              USER: AVAILABLE EXAMS
+// =========================================================
+
+// ---------- USER: LIST AVAILABLE EXAMS ----------
+router.get("/user/exams", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can access this" });
+    }
+
+    const exams = await Exam.find({ isActive: true })
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .sort({ createdAt: -1 });
+
+    // User ko sirf card info do, questions nahi
+    const formatted = exams.map((e, idx) => ({
+      _id: e._id,
+      step: `STEP ${String(idx + 1).padStart(2, "0")}`,
+      title: e.title,
+      description: e.description || e.courseId?.name || "",
+      duration: e.duration,
+      passPercentage: e.passPercentage,
+      questionCount: e.questionIds?.length || 0,
+      courseName: e.courseId?.name || "",
+      subjectName: e.subjectId?.name || "",
+    }));
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------- USER: GET EXAM + QUESTIONS ----------
+router.get("/user/exams/:id", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can access this" });
+    }
+
+    const exam = await Exam.findById(req.params.id)
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .populate("questionIds");
+
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+    if (!exam.isActive) return res.status(400).json({ message: "Exam is not active" });
+
+    // ⚠️ User ko correctAnswer mat bhejo
+    const safeQuestions = (exam.questionIds || []).map((q) => ({
+      _id: q._id,
+      question: q.question,
+      type: q.type,
+      options: q.options,
+      // ❌ correctAnswer hata diya
+    }));
+
+    res.json({
+      _id: exam._id,
+      title: exam.title,
+      description: exam.description,
+      duration: exam.duration,
+      passPercentage: exam.passPercentage,
+      courseName: exam.courseId?.name || "",
+      subjectName: exam.subjectId?.name || "",
+      questions: safeQuestions,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------- USER: SUBMIT EXAM ----------
+router.post("/user/exams/:id/submit", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can access this" });
+    }
+
+    const { answers } = req.body;
+    if (!Array.isArray(answers) || answers.length === 0) {
+      return res.status(400).json({ message: "Answers are required" });
+    }
+
+    const exam = await Exam.findById(req.params.id).populate("questionIds");
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+
+    const questions = exam.questionIds || [];
+    if (questions.length === 0) {
+      return res.status(400).json({ message: "This exam has no questions" });
+    }
+
+    let autoCorrect = 0, autoWrong = 0, writtenPending = 0, maxScore = 0;
+    const processedAnswers = [];
+
+    for (const q of questions) {
+      const ans = answers.find((a) => a.questionId === q._id.toString());
+      const userAnswer = (ans?.userAnswer || "").toString().trim();
+      const correctAnswer = (q.correctAnswer || "").toString().trim();
+
+      let isCorrect = false, marks = 0, reviewed = false;
+      const maxMarks = 1;
+      maxScore += maxMarks;
+
+      if (q.type === "Written") {
+        writtenPending++;
+        marks = 0;
+        reviewed = false;
+      } else {
+        if (q.type === "Fill in the Blank") {
+          isCorrect = userAnswer.toLowerCase() === correctAnswer.toLowerCase() && userAnswer !== "";
+        } else {
+          isCorrect = userAnswer === correctAnswer;
+        }
+        marks = isCorrect ? maxMarks : 0;
+        if (isCorrect) autoCorrect++; else autoWrong++;
+        reviewed = true;
+      }
+
+      processedAnswers.push({
+        questionId: q._id,
+        questionText: q.question,
+        type: q.type,
+        userAnswer,
+        correctAnswer,
+        isCorrect,
+        marks,
+        maxMarks,
+        reviewed,
+      });
+    }
+
+    const totalScore = processedAnswers.reduce((s, a) => s + (a.marks || 0), 0);
+    const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
+
+    let status = "pending";
+    if (writtenPending === 0) {
+      status = percentage >= (exam.passPercentage || 50) ? "Pass" : "Fail";
+    }
+
+    const result = await ExamResult.create({
+      userId: req.user.userId,
+      examId: exam._id,
+      courseId: exam.courseId,
+      subjectId: exam.subjectId,
+      answers: processedAnswers,
+      totalQuestions: processedAnswers.length,
+      autoCorrect,
+      autoWrong,
+      writtenPending,
+      totalScore,
+      maxScore,
+      percentage,
+      status,
+    });
+
+    const populated = await ExamResult.findById(result._id)
+      .populate("userId", "nameEnglish rollNumber mobileNumber")
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .populate("examId", "title");
+
+    res.status(201).json({
+      message: "Exam submitted successfully ✅",
+      data: populated,
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

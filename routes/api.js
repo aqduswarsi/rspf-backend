@@ -1943,4 +1943,69 @@ router.post("/user/exams/:id/submit", authMiddleware, async (req, res) => {
   }
 });
 
+// =========================================================
+//              USER RESULTS + DASHBOARD STATS
+// =========================================================
+
+// ---------- USER: MY RESULTS LIST ----------
+router.get("/user/results", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can access this" });
+    }
+
+    const results = await ExamResult.find({ userId: req.user.userId })
+      .populate("examId", "title")
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .sort({ createdAt: -1 });
+
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------- USER: MY RESULT DETAIL ----------
+router.get("/user/results/:id", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can access this" });
+    }
+
+    const result = await ExamResult.findById(req.params.id)
+      .populate("examId", "title")
+      .populate("courseId", "name")
+      .populate("subjectId", "name");
+
+    if (!result) return res.status(404).json({ message: "Result not found" });
+    if (result.userId.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not your result" });
+    }
+
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ---------- USER: DASHBOARD STATS ----------
+router.get("/user/dashboard/stats", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user") {
+      return res.status(403).json({ message: "Only users can access this" });
+    }
+
+    const userId = req.user.userId;
+    const total = await ExamResult.countDocuments({ userId });
+    const passed = await ExamResult.countDocuments({ userId, status: "Pass" });
+    const failed = await ExamResult.countDocuments({ userId, status: "Fail" });
+    const pending = await ExamResult.countDocuments({ userId, status: "pending" });
+
+    res.json({ total, passed, failed, pending });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 module.exports = router;

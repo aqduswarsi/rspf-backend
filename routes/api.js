@@ -336,7 +336,7 @@ router.get("/stats", authMiddleware, async (req, res) => {
 });
 
 // =========================================================
-//                  USER LOGIN (Phone + DOB)
+//                  USER LOGIN (Phone + Custom Password / DOB)
 // =========================================================
 
 router.post("/user/login", async (req, res) => {
@@ -362,12 +362,22 @@ router.post("/user/login", async (req, res) => {
       return res.status(403).json({ message: "Account not verified yet." });
     }
 
-    const dob = user.dateOfBirth || "";
-    const parts = dob.split("-");
-    const expectedPassword =
-      parts.length === 3 ? `${parts[2]}${parts[1]}${parts[0]}` : "";
+    // ✅ Password check: custom password ya DOB (fallback)
+    let passwordOk = false;
 
-    if (!expectedPassword || password !== expectedPassword) {
+    if (user.password && user.password.length > 0) {
+      // Custom password set hai
+      passwordOk = await bcrypt.compare(password, user.password);
+    } else {
+      // Fallback: DOB (ddmmyyyy)
+      const dob = user.dateOfBirth || "";
+      const parts = dob.split("-");
+      const expected =
+        parts.length === 3 ? `${parts[2]}${parts[1]}${parts[0]}` : "";
+      passwordOk = expected && password === expected;
+    }
+
+    if (!passwordOk) {
       return res.status(400).json({ message: "Invalid credentials" });
     }
 
@@ -492,40 +502,27 @@ router.put("/user/profile", authMiddleware, async (req, res) => {
 
 router.put("/user/change-password", authMiddleware, async (req, res) => {
   try {
-    if (req.user.role !== "user") {
-      return res.status(403).json({ message: "Only users can access this" });
-    }
+    if (req.user.role !== "user")
+      return res.status(403).json({ message: "Users only" });
 
-    const { oldPassword, newPassword } = req.body;
+    const { newPassword, confirmPassword } = req.body;
 
-    if (!oldPassword || !newPassword) {
-      return res.status(400).json({ message: "Old and new password required" });
-    }
+    if (!newPassword || !confirmPassword)
+      return res.status(400).json({ message: "All fields required" });
 
-    if (newPassword.length < 6) {
-      return res
-        .status(400)
-        .json({ message: "New password must be at least 6 characters" });
-    }
+    if (newPassword !== confirmPassword)
+      return res.status(400).json({ message: "Passwords don't match" });
+
+    if (newPassword.length < 6)
+      return res.status(400).json({ message: "Min 6 characters" });
 
     const user = await BioData.findById(req.user.userId);
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
+    if (!user) return res.status(404).json({ message: "User not found" });
 
-    const dob = user.dateOfBirth || "";
-    const parts = dob.split("-");
-    const expectedPassword =
-      parts.length === 3 ? `${parts[2]}${parts[1]}${parts[0]}` : "";
+    user.password = await bcrypt.hash(newPassword, 10);
+    await user.save();
 
-    if (oldPassword !== expectedPassword) {
-      return res.status(400).json({ message: "Old password wrong" });
-    }
-
-    res.json({
-      message:
-        "ℹ️ Your password is fixed as DOB (ddmmyyyy). Contact admin to change it.",
-    });
+    res.json({ message: "✅ Password updated successfully" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

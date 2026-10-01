@@ -1733,18 +1733,37 @@ router.post("/education/exams/:id/questions", authMiddleware, async (req, res) =
   try {
     const { questionIds } = req.body;
 
-    if (!Array.isArray(questionIds)) {
+    if (!Array.isArray(questionIds) || questionIds.length === 0) {
       return res.status(400).json({ message: "questionIds array required" });
     }
 
-    // Verify all questions exist
+    // Exam dhundo
+    const exam = await Exam.findById(req.params.id);
+    if (!exam) return res.status(404).json({ message: "Exam not found" });
+
+    // Saare questions exist karte hain?
     const found = await Question.find({ _id: { $in: questionIds } });
     if (found.length !== questionIds.length) {
       return res.status(400).json({ message: "Some questions not found" });
     }
 
-    // Replace exam's questionIds (ya merge karna ho toh $addToSet)
-    const exam = await Exam.findByIdAndUpdate(
+    // ⚠️ ZARURI: har question exam ke SAME subject ka hona chahiye
+    const examSubjectId = exam.subjectId?.toString();
+    const wrongSubject = found.find((q) => {
+      // Agar question ka subject null hai (purana data) toh allow karo
+      if (!q.subjectId) return false;
+      return q.subjectId.toString() !== examSubjectId;
+    });
+
+    if (wrongSubject) {
+      return res.status(400).json({
+        message:
+          "❌ Is exam me sirf same subject ke questions attach ho sakte hain.",
+      });
+    }
+
+    // Attach karo
+    const updated = await Exam.findByIdAndUpdate(
       req.params.id,
       { questionIds },
       { new: true }
@@ -1753,11 +1772,9 @@ router.post("/education/exams/:id/questions", authMiddleware, async (req, res) =
       .populate("subjectId", "name")
       .populate("questionIds");
 
-    if (!exam) return res.status(404).json({ message: "Exam not found" });
-
     res.json({
-      message: `✅ ${questionIds.length} questions attached to exam`,
-      data: exam,
+      message: `✅ ${questionIds.length} questions attached`,
+      data: updated,
     });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });

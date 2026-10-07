@@ -16,6 +16,7 @@ const Question = require("../models/Question");
 const ExamResult = require("../models/ExamResult");
 const SupportTicket = require("../models/SupportTicket");
 const ContactDetails = require("../models/ContactDetails");
+const ReattemptRequest = require("../models/ReattemptRequest");
 
 const router = express.Router();
 
@@ -1785,37 +1786,6 @@ router.post("/education/exams/:id/questions", authMiddleware, async (req, res) =
 //              USER: AVAILABLE EXAMS
 // =========================================================
 
-// ---------- USER: LIST AVAILABLE EXAMS ----------
-router.get("/user/exams", authMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== "user") {
-      return res.status(403).json({ message: "Only users can access this" });
-    }
-
-    const exams = await Exam.find({ isActive: true })
-      .populate("courseId", "name")
-      .populate("subjectId", "name")
-      .sort({ createdAt: -1 });
-
-    // User ko sirf card info do, questions nahi
-    const formatted = exams.map((e, idx) => ({
-      _id: e._id,
-      step: `STEP ${String(idx + 1).padStart(2, "0")}`,
-      title: e.title,
-      description: e.description || e.courseId?.name || "",
-      duration: e.duration,
-      passPercentage: e.passPercentage,
-      questionCount: e.questionIds?.length || 0,
-      courseName: e.courseId?.name || "",
-      subjectName: e.subjectId?.name || "",
-    }));
-
-    res.json(formatted);
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
-
 // ---------- USER: GET EXAM + QUESTIONS ----------
 router.get("/user/exams/:id", authMiddleware, async (req, res) => {
   try {
@@ -1831,13 +1801,34 @@ router.get("/user/exams/:id", authMiddleware, async (req, res) => {
     if (!exam) return res.status(404).json({ message: "Exam not found" });
     if (!exam.isActive) return res.status(400).json({ message: "Exam is not active" });
 
+    // ✅ NEW: Already attempted check
+    const existingResult = await ExamResult.findOne({
+      userId: req.user.userId,
+      examId: exam._id,
+    });
+
+    if (existingResult) {
+      const approved = await ReattemptRequest.findOne({
+        userId: req.user.userId,
+        examId: exam._id,
+        status: "approved",
+      });
+
+      if (!approved) {
+        return res.status(403).json({
+          message:
+            "Aapne ye exam already attempt kar liya hai. Reattempt ke liye request submit karo.",
+          alreadyAttempted: true,
+        });
+      }
+    }
+
     // ⚠️ User ko correctAnswer mat bhejo
     const safeQuestions = (exam.questionIds || []).map((q) => ({
       _id: q._id,
       question: q.question,
       type: q.type,
       options: q.options,
-      // ❌ correctAnswer hata diya
     }));
 
     res.json({
@@ -1870,7 +1861,20 @@ router.post("/user/exams/:id/submit", authMiddleware, async (req, res) => {
     const exam = await Exam.findById(req.params.id).populate("questionIds");
     if (!exam) return res.status(404).json({ message: "Exam not found" });
 
-    const questions = exam.questionIds || [];
+        await ExamResult.findOneAndDelete({
+          userId: req.user.userId,
+          examId: exam._id,
+        });
+
+        // ✅ Approved request use ho gayi — delete karo
+        await ReattemptRequest.findOneAndDelete({
+          userId: req.user.userId,
+          examId: exam._id,
+          status: "approved",
+        });
+
+        const questions = exam.questionIds || [];
+
     if (questions.length === 0) {
       return res.status(400).json({ message: "This exam has no questions" });
     }
@@ -1957,6 +1961,66 @@ router.post("/user/exams/:id/submit", authMiddleware, async (req, res) => {
 // =========================================================
 //              USER RESULTS + DASHBOARD STATS
 // =========================================================
+
+// ---------- USER: LIST AVAILABLE EXAMS ----------
+router.get("/user/exams", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user")
+      return res.status(403).json({ message: "Only users can access this" });
+
+    const exams = await Exam.find({ isActive: true })
+      .populate("courseId", "name")
+      .populate("subjectId", "name")
+      .sort({ createdAt: -1 });
+
+    const results = await ExamResult.find({ userId: req.user.userId }).select(
+      "examId",
+    );
+    const attemptedExamIds = results
+      .map((r) => r.examId?.toString())
+      .filter(Boolean);
+
+    const requests = await ReattemptRequest.find({
+      userId: req.user.userId,
+      status: { $in: ["pending", "approved"] },
+    }).select("examId status");
+
+    const requestMap = {};
+    requests.forEach((r) => {
+      requestMap[r.examId.toString()] = r.status;
+    });
+
+    const formatted = exams.map((e, idx) => {
+      const examIdStr = e._id.toString();
+      const attempted = attemptedExamIds.includes(examIdStr);
+      const requestStatus = requestMap[examIdStr] || null;
+
+      let canAttempt = true;
+      if (attempted && requestStatus !== "approved") {
+        canAttempt = false;
+      }
+
+      return {
+        _id: e._id,
+        step: `STEP ${String(idx + 1).padStart(2, "0")}`,
+        title: e.title,
+        description: e.description || e.courseId?.name || "",
+        duration: e.duration,
+        passPercentage: e.passPercentage,
+        questionCount: e.questionIds?.length || 0,
+        courseName: e.courseId?.name || "",
+        subjectName: e.subjectId?.name || "",
+        attempted,
+        requestStatus,
+        canAttempt,
+      };
+    });
+
+    res.json(formatted);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
 
 // ---------- USER: MY RESULTS LIST ----------
 router.get("/user/results", authMiddleware, async (req, res) => {
@@ -2058,5 +2122,129 @@ router.post("/user/tickets", authMiddleware, async (req, res) => {
     res.status(500).json({ message: "Server error", error: err.message });
   }
 });
+
+// =========================================================
+//              USER REATTEMPT REQUESTS
+// =========================================================
+
+// USER: submit reattempt request
+router.post(
+  "/user/exams/:id/reattempt-request",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      if (req.user.role !== "user")
+        return res.status(403).json({ message: "Users only" });
+
+      const { reason } = req.body;
+      if (!reason || !reason.trim())
+        return res.status(400).json({ message: "Reason required hai" });
+
+      const examId = req.params.id;
+
+      // Check user has attempted
+      const existingResult = await ExamResult.findOne({
+        userId: req.user.userId,
+        examId,
+      });
+      if (!existingResult)
+        return res
+          .status(400)
+          .json({ message: "Aapne ye exam attempt nahi kiya" });
+
+      // Pending request already?
+      const pending = await ReattemptRequest.findOne({
+        userId: req.user.userId,
+        examId,
+        status: "pending",
+      });
+      if (pending)
+        return res
+          .status(400)
+          .json({ message: "Aapka request already pending hai" });
+
+      const request = await ReattemptRequest.create({
+        userId: req.user.userId,
+        examId,
+        resultId: existingResult._id,
+        reason: reason.trim(),
+      });
+
+      res
+        .status(201)
+        .json({ message: "Request submit ho gaya", data: request });
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
+  },
+);
+
+// USER: own reattempt requests
+router.get("/user/reattempt-requests", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user")
+      return res.status(403).json({ message: "Users only" });
+
+    const requests = await ReattemptRequest.find({ userId: req.user.userId })
+      .populate("examId", "title")
+      .sort({ createdAt: -1 });
+
+    res.json(requests);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ADMIN: list requests
+router.get("/admin/reattempt-requests", authMiddleware, async (req, res) => {
+  try {
+    const { status } = req.query;
+    const filter = {};
+    if (status) filter.status = status;
+
+    const requests = await ReattemptRequest.find(filter)
+      .populate("userId", "nameEnglish rollNumber mobileNumber")
+      .populate("examId", "title")
+      .sort({ createdAt: -1 });
+
+    res.json(requests);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// ADMIN: approve / reject
+router.put(
+  "/admin/reattempt-requests/:id",
+  authMiddleware,
+  async (req, res) => {
+    try {
+      const { status, adminNote } = req.body;
+
+      if (!["approved", "rejected"].includes(status))
+        return res.status(400).json({ message: "Invalid status" });
+
+      const request = await ReattemptRequest.findByIdAndUpdate(
+        req.params.id,
+        {
+          status,
+          adminNote: adminNote || "",
+          respondedBy: req.user.email || "admin",
+          respondedAt: new Date(),
+        },
+        { new: true },
+      )
+        .populate("userId", "nameEnglish rollNumber")
+        .populate("examId", "title");
+
+      if (!request)
+        return res.status(404).json({ message: "Request not found" });
+
+      res.json({ message: `Request ${status}`, data: request });
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
+  },
+);
 
 module.exports = router;

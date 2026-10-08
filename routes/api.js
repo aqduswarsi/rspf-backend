@@ -18,6 +18,7 @@ const SupportTicket = require("../models/SupportTicket");
 const ContactDetails = require("../models/ContactDetails");
 const ReattemptRequest = require("../models/ReattemptRequest");
 const CourseProforma = require("../models/CourseProforma");
+const Certificate = require("../models/Certificate");
 
 const router = express.Router();
 
@@ -2310,6 +2311,51 @@ router.delete("/course-proforma/:id", authMiddleware, async (req, res) => {
     const record = await CourseProforma.findByIdAndDelete(req.params.id);
     if (!record) return res.status(404).json({ message: "Not found" });
     res.json({ message: "Record deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  CERTIFICATES
+// =========================================================
+
+router.post("/certificates", authMiddleware, async (req, res) => {
+  try {
+    const cert = await Certificate.create({
+      ...req.body,
+      createdBy: req.user.email || "admin",
+    });
+    res.status(201).json({ message: "Certificate created successfully", data: cert });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.get("/certificates", authMiddleware, async (req, res) => {
+  try {
+    const certs = await Certificate.find().sort({ createdAt: -1 });
+    res.json(certs);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.get("/certificates/:id", authMiddleware, async (req, res) => {
+  try {
+    const cert = await Certificate.findById(req.params.id);
+    if (!cert) return res.status(404).json({ message: "Not found" });
+    res.json(cert);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.delete("/certificates/:id", authMiddleware, async (req, res) => {
+  try {
+    const cert = await Certificate.findByIdAndDelete(req.params.id);
+    if (!cert) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Certificate deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

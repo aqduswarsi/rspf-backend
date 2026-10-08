@@ -17,6 +17,7 @@ const ExamResult = require("../models/ExamResult");
 const SupportTicket = require("../models/SupportTicket");
 const ContactDetails = require("../models/ContactDetails");
 const ReattemptRequest = require("../models/ReattemptRequest");
+const CourseProforma = require("../models/CourseProforma");
 
 const router = express.Router();
 
@@ -2246,5 +2247,72 @@ router.put(
     }
   },
 );
+
+// =========================================================
+//                  COURSE PROFORMA (Data Entry)
+// =========================================================
+
+// CREATE
+router.post("/course-proforma", authMiddleware, async (req, res) => {
+  try {
+    const data = await CourseProforma.create({
+      ...req.body,
+      createdBy: req.user.email || "admin",
+    });
+    res.status(201).json({
+      message: "Record created successfully",
+      data,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL
+router.get("/course-proforma", authMiddleware, async (req, res) => {
+  try {
+    const records = await CourseProforma.find().sort({ createdAt: -1 });
+    res.json(records);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// GET ONE
+router.get("/course-proforma/:id", authMiddleware, async (req, res) => {
+  try {
+    const record = await CourseProforma.findById(req.params.id);
+    if (!record) return res.status(404).json({ message: "Not found" });
+    res.json(record);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE
+router.put("/course-proforma/:id", authMiddleware, async (req, res) => {
+  try {
+    const record = await CourseProforma.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    if (!record) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Record updated successfully", data: record });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE
+router.delete("/course-proforma/:id", authMiddleware, async (req, res) => {
+  try {
+    const record = await CourseProforma.findByIdAndDelete(req.params.id);
+    if (!record) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Record deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
 
 module.exports = router;

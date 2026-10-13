@@ -2,14 +2,27 @@ const mongoose = require("mongoose");
 
 const questionSchema = new mongoose.Schema(
   {
+    // English
     question: { type: String, required: true, trim: true },
+
+    // Hindi (optional)
+    questionHindi: { type: String, default: "", trim: true },
+
     type: {
       type: String,
       required: true,
       enum: ["MCQ", "Fill in the Blank", "True / False", "Written"],
     },
-    options: { type: [String], default: [] }, // MCQ only
-    correctAnswer: { type: String, default: "" }, // MCQ: letter, T/F: True/False, Fill: text, Written: ""
+
+    // MCQ only — English
+    options: { type: [String], default: [] },
+
+    // MCQ only — Hindi (same index as English options)
+    optionsHindi: { type: [String], default: [] },
+
+    // MCQ: letter (A/B/C/D), T/F: True/False, Fill: text, Written: ""
+    correctAnswer: { type: String, default: "" },
+
     courseId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Course",

@@ -1040,8 +1040,16 @@ router.delete("/education/lessons/:id", authMiddleware, async (req, res) => {
 // CREATE QUESTION (Admin only)
 router.post("/education/exam/questions", authMiddleware, async (req, res) => {
   try {
-    const { question, type, options, correctAnswer, courseId, subjectId } =
-      req.body;
+    const {
+      question,
+      questionHindi,
+      type,
+      options,
+      optionsHindi,
+      correctAnswer,
+      courseId,
+      subjectId,
+    } = req.body;
 
     // Validation
     if (!question || !question.trim()) {
@@ -1116,8 +1124,10 @@ router.post("/education/exam/questions", authMiddleware, async (req, res) => {
 
     const newQuestion = await Question.create({
       question: question.trim(),
+      questionHindi: (questionHindi || "").trim(),
       type,
       options: finalOptions,
+      optionsHindi: Array.isArray(optionsHindi) ? optionsHindi : [],
       correctAnswer: finalAnswer,
       courseId,
       subjectId,
@@ -1177,16 +1187,27 @@ router.get("/education/exam/questions/:id", async (req, res) => {
 // UPDATE QUESTION (Admin only)
 router.put("/education/exam/questions/:id", authMiddleware, async (req, res) => {
   try {
-    const { question, type, options, correctAnswer, courseId, subjectId } =
-      req.body;
+    const {
+      question,
+      questionHindi,
+      type,
+      options,
+      optionsHindi,
+      correctAnswer,
+      courseId,
+      subjectId,
+    } = req.body;
 
-    const updateData = {};
-    if (question !== undefined) updateData.question = question.trim();
-    if (type !== undefined) updateData.type = type;
-    if (options !== undefined) updateData.options = options;
-    if (correctAnswer !== undefined) updateData.correctAnswer = correctAnswer;
-    if (courseId !== undefined) updateData.courseId = courseId;
-    if (subjectId !== undefined) updateData.subjectId = subjectId;
+   const updateData = {};
+   if (question !== undefined) updateData.question = question.trim();
+   if (questionHindi !== undefined)
+     updateData.questionHindi = questionHindi.trim();
+   if (type !== undefined) updateData.type = type;
+   if (options !== undefined) updateData.options = options;
+   if (optionsHindi !== undefined) updateData.optionsHindi = optionsHindi;
+   if (correctAnswer !== undefined) updateData.correctAnswer = correctAnswer;
+   if (courseId !== undefined) updateData.courseId = courseId;
+   if (subjectId !== undefined) updateData.subjectId = subjectId;
 
     const updated = await Question.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
@@ -1829,8 +1850,10 @@ router.get("/user/exams/:id", authMiddleware, async (req, res) => {
     const safeQuestions = (exam.questionIds || []).map((q) => ({
       _id: q._id,
       question: q.question,
+      questionHindi: q.questionHindi || "",
       type: q.type,
       options: q.options,
+      optionsHindi: q.optionsHindi || [],
     }));
 
     res.json({

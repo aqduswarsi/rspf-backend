@@ -19,6 +19,7 @@ const ContactDetails = require("../models/ContactDetails");
 const ReattemptRequest = require("../models/ReattemptRequest");
 const CourseProforma = require("../models/CourseProforma");
 const Certificate = require("../models/Certificate");
+const TrainingCertificate = require("../models/TrainingCertificate");
 
 const router = express.Router();
 
@@ -2372,6 +2373,54 @@ router.delete("/certificates/:id", authMiddleware, async (req, res) => {
     const cert = await Certificate.findByIdAndDelete(req.params.id);
     if (!cert) return res.status(404).json({ message: "Not found" });
     res.json({ message: "Certificate deleted successfully" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//              TRAINING CERTIFICATES
+// =========================================================
+
+router.post("/training-certificates", authMiddleware, async (req, res) => {
+  try {
+    const cert = await TrainingCertificate.create({
+      ...req.body,
+      createdBy: req.user.email || "admin",
+    });
+    res.status(201).json({
+      message: "Training certificate created successfully",
+      data: cert,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.get("/training-certificates", authMiddleware, async (req, res) => {
+  try {
+    const certs = await TrainingCertificate.find().sort({ createdAt: -1 });
+    res.json(certs);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.get("/training-certificates/:id", authMiddleware, async (req, res) => {
+  try {
+    const cert = await TrainingCertificate.findById(req.params.id);
+    if (!cert) return res.status(404).json({ message: "Not found" });
+    res.json(cert);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.delete("/training-certificates/:id", authMiddleware, async (req, res) => {
+  try {
+    const cert = await TrainingCertificate.findByIdAndDelete(req.params.id);
+    if (!cert) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Training certificate deleted successfully" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

@@ -2426,4 +2426,38 @@ router.delete("/training-certificates/:id", authMiddleware, async (req, res) => 
   }
 });
 
+// =========================================================
+//              TRANSLATE (English -> Hindi)
+// =========================================================
+
+router.post("/translate", authMiddleware, async (req, res) => {
+  try {
+    const { text, target = "hi" } = req.body;
+
+    if (!text || !text.trim()) {
+      return res.status(400).json({ message: "Text is required" });
+    }
+
+    // MyMemory API — free, no key
+    const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(
+      text.trim()
+    )}&langpair=en|${target}`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    if (
+      !data.responseData ||
+      !data.responseData.translatedText ||
+      data.responseStatus !== 200
+    ) {
+      return res.status(500).json({ message: "Translation failed" });
+    }
+
+    res.json({ translated: data.responseData.translatedText });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 module.exports = router;

@@ -2,8 +2,9 @@ const mongoose = require("mongoose");
 
 const lessonSchema = new mongoose.Schema(
   {
-    title: { type: String, required: true, trim: true }, // ← Content Title
-    content: { type: String, required: true }, // ← HTML Description
+    title: { type: String, default: "", trim: true },
+    content: { type: String, default: "" },
+    pdfUrl: { type: String, default: "" },
     courseId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Course",

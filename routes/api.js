@@ -920,35 +920,27 @@ router.delete("/education/subjects/:id", authMiddleware, async (req, res) => {
 // CREATE LESSON (Admin only)
 router.post("/education/lessons", authMiddleware, async (req, res) => {
   try {
-    const { title, content, courseId, subjectId } = req.body;
-
-    if (!title || !title.trim()) {
-      return res.status(400).json({ message: "Title is required" });
-    }
-
-    if (!content || !content.trim()) {
-      return res.status(400).json({ message: "Content is required" });
-    }
+    const { title, content, pdfUrl, courseId, subjectId } = req.body;
 
     if (!courseId) {
       return res.status(400).json({ message: "Course is required" });
     }
-
     if (!subjectId) {
       return res.status(400).json({ message: "Subject is required" });
     }
 
-    // Verify course exists
-    const course = await Course.findById(courseId);
-    if (!course) {
-      return res.status(404).json({ message: "Course not found" });
+    // At least one field required
+    if (!title?.trim() && !content?.trim() && !pdfUrl?.trim()) {
+      return res.status(400).json({
+        message: "At least one of Title, Description, or PDF is required",
+      });
     }
 
-    // Verify subject exists and belongs to this course
+    const course = await Course.findById(courseId);
+    if (!course) return res.status(404).json({ message: "Course not found" });
+
     const subject = await Subject.findById(subjectId);
-    if (!subject) {
-      return res.status(404).json({ message: "Subject not found" });
-    }
+    if (!subject) return res.status(404).json({ message: "Subject not found" });
 
     if (subject.courseId.toString() !== courseId.toString()) {
       return res
@@ -957,19 +949,19 @@ router.post("/education/lessons", authMiddleware, async (req, res) => {
     }
 
     const lesson = await Lesson.create({
-      title: title.trim(),
-      content,
+      title: (title || "").trim(),
+      content: content || "",
+      pdfUrl: pdfUrl || "",
       courseId,
       subjectId,
     });
 
-    // Populate names for response
     const populated = await Lesson.findById(lesson._id)
       .populate("courseId", "name")
       .populate("subjectId", "name");
 
     res.status(201).json({
-      message: "Lesson added successfully ✅",
+      message: "Lesson added successfully",
       data: populated,
     });
   } catch (err) {
@@ -1000,11 +992,12 @@ router.get("/education/lessons", async (req, res) => {
 // UPDATE LESSON (Admin only)
 router.put("/education/lessons/:id", authMiddleware, async (req, res) => {
   try {
-    const { title, content, courseId, subjectId } = req.body;
+    const { title, content, pdfUrl, courseId, subjectId } = req.body;
 
     const updateData = {};
     if (title !== undefined) updateData.title = title.trim();
     if (content !== undefined) updateData.content = content;
+    if (pdfUrl !== undefined) updateData.pdfUrl = pdfUrl;
     if (courseId !== undefined) updateData.courseId = courseId;
     if (subjectId !== undefined) updateData.subjectId = subjectId;
 
@@ -1016,7 +1009,7 @@ router.put("/education/lessons/:id", authMiddleware, async (req, res) => {
 
     if (!lesson) return res.status(404).json({ message: "Lesson not found" });
 
-    res.json({ message: "Lesson updated ✅", data: lesson });
+    res.json({ message: "Lesson updated", data: lesson });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

@@ -67,6 +67,8 @@ const feedbackSchema = new mongoose.Schema(
       default: null,
     },
     adminReviewed: { type: Boolean, default: false },
+    adminReviewedBy: { type: String, default: "" },
+    adminReviewedAt: { type: Date, default: null },
 
     // Computed average (excludes N/A and blanks)
     averageRating: { type: Number, default: 0 },

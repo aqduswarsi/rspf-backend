@@ -2540,8 +2540,11 @@ const computeAverage = (feedback) => {
 
 const getUserFeedbackPayload = (body) => {
   const {
+    _id,
     userId,
     adminReviewed,
+    adminReviewedBy,
+    adminReviewedAt,
     averageRating,
     createdBy,
     createdAt,
@@ -2560,63 +2563,133 @@ const getUserFeedbackPayload = (body) => {
   return payload;
 };
 
-router.post("/feedback", authMiddleware, async (req, res) => {
-  try {
-    const avg = computeAverage(req.body);
-    const data = await Feedback.create({
-      ...req.body,
-      averageRating: avg,
-      createdBy: req.user.email || "admin",
-    });
-    res.status(201).json({ message: "Feedback submitted successfully", data });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
+const getAdminFeedbackPayload = (body) => {
+  const {
+    _id,
+    userId,
+    adminReviewed,
+    adminReviewedBy,
+    adminReviewedAt,
+    averageRating,
+    createdBy,
+    createdAt,
+    updatedAt,
+    __v,
+    ...payload
+  } = body;
+  return payload;
+};
 
-router.get("/feedback", authMiddleware, async (req, res) => {
-  try {
-    const data = await Feedback.find().sort({ createdAt: -1 });
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
+const getUserFeedbackResponse = (feedback) => {
+  const data = feedback.toObject();
+  const {
+    userId,
+    adminCategory,
+    adminPriority,
+    assignedTo,
+    actionTaken,
+    adminStatus,
+    resolutionRemarks,
+    verifiedBy,
+    reopened,
+    adminReviewed,
+    adminReviewedBy,
+    adminReviewedAt,
+    ...userData
+  } = data;
+  return userData;
+};
 
-router.get("/feedback/:id", authMiddleware, async (req, res) => {
-  try {
-    const data = await Feedback.findById(req.params.id);
-    if (!data) return res.status(404).json({ message: "Not found" });
-    res.json(data);
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+router.post(
+  "/feedback",
+  authMiddleware,
+  authMiddleware.adminOnly,
+  async (req, res) => {
+    try {
+      const payload = getAdminFeedbackPayload(req.body);
+      const data = await Feedback.create({
+        ...payload,
+        averageRating: computeAverage(payload),
+        createdBy: req.user.email || "admin",
+      });
+      res.status(201).json({ message: "Feedback submitted successfully", data });
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
   }
-});
+);
 
-router.put("/feedback/:id", authMiddleware, async (req, res) => {
-  try {
-    const avg = computeAverage(req.body);
-    const data = await Feedback.findByIdAndUpdate(
-      req.params.id,
-      { ...req.body, averageRating: avg },
-      { new: true }
-    );
-    if (!data) return res.status(404).json({ message: "Not found" });
-    res.json({ message: "Feedback updated", data });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+router.get(
+  "/feedback",
+  authMiddleware,
+  authMiddleware.adminOnly,
+  async (req, res) => {
+    try {
+      const data = await Feedback.find().sort({ createdAt: -1 });
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
   }
-});
+);
 
-router.delete("/feedback/:id", authMiddleware, async (req, res) => {
-  try {
-    const data = await Feedback.findByIdAndDelete(req.params.id);
-    if (!data) return res.status(404).json({ message: "Not found" });
-    res.json({ message: "Feedback deleted" });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
+router.get(
+  "/feedback/:id",
+  authMiddleware,
+  authMiddleware.adminOnly,
+  async (req, res) => {
+    try {
+      const data = await Feedback.findById(req.params.id);
+      if (!data) return res.status(404).json({ message: "Not found" });
+      res.json(data);
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
   }
-});
+);
+
+router.put(
+  "/feedback/:id",
+  authMiddleware,
+  authMiddleware.adminOnly,
+  async (req, res) => {
+    try {
+      const payload = getAdminFeedbackPayload(req.body);
+      const existing = await Feedback.findById(req.params.id);
+      if (!existing) return res.status(404).json({ message: "Not found" });
+      const avg = computeAverage({ ...existing.toObject(), ...payload });
+      const data = await Feedback.findByIdAndUpdate(
+        req.params.id,
+        {
+          ...payload,
+          averageRating: avg,
+          adminReviewed: true,
+          adminReviewedBy: req.user.email || "admin",
+          adminReviewedAt: new Date(),
+        },
+        { new: true, runValidators: true }
+      );
+      res.json({ message: "Feedback updated", data });
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
+  }
+);
+
+router.delete(
+  "/feedback/:id",
+  authMiddleware,
+  authMiddleware.adminOnly,
+  async (req, res) => {
+    try {
+      const data = await Feedback.findByIdAndDelete(req.params.id);
+      if (!data) return res.status(404).json({ message: "Not found" });
+      res.json({ message: "Feedback deleted" });
+    } catch (err) {
+      res.status(500).json({ message: "Server error", error: err.message });
+    }
+  }
+);
 
 // =========================================================
 //              USER FEEDBACK (own submissions)
@@ -2634,9 +2707,13 @@ router.post("/user/feedback", authMiddleware, async (req, res) => {
       ...feedbackPayload,
       userId: req.user.userId,
       averageRating: avg,
+      adminReviewed: false,
       createdBy: req.user.email || "user",
     });
-    res.status(201).json({ message: "Feedback submitted successfully", data });
+    res.status(201).json({
+      message: "Feedback submitted successfully",
+      data: getUserFeedbackResponse(data),
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
@@ -2651,7 +2728,7 @@ router.get("/user/feedback", authMiddleware, async (req, res) => {
     const data = await Feedback.find({ userId: req.user.userId }).sort({
       createdAt: -1,
     });
-    res.json(data);
+    res.json(data.map(getUserFeedbackResponse));
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
@@ -2677,10 +2754,19 @@ router.put("/user/feedback/:id", authMiddleware, async (req, res) => {
     });
     const data = await Feedback.findByIdAndUpdate(
       req.params.id,
-      { ...feedbackPayload, averageRating: avg },
+      {
+        ...feedbackPayload,
+        averageRating: avg,
+        adminReviewed: false,
+        adminReviewedBy: "",
+        adminReviewedAt: null,
+      },
       { new: true, runValidators: true }
     );
-    res.json({ message: "Feedback updated successfully", data });
+    res.json({
+      message: "Feedback updated successfully",
+      data: getUserFeedbackResponse(data),
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
@@ -2701,6 +2787,142 @@ router.delete("/user/feedback/:id", authMiddleware, async (req, res) => {
 
     await Feedback.findByIdAndDelete(req.params.id);
     res.json({ message: "Feedback deleted" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+
+// -------------------- ADMIN DASBOARD ----------------
+
+router.get("/admin/dashboard", authMiddleware, async (req, res) => {
+  try {
+    // User stats (already hai /stats me, but yahan bhi)
+    const totalUsers = await BioData.countDocuments();
+    const unverified = await BioData.countDocuments({ status: "unverified" });
+    const verified = await BioData.countDocuments({ status: "verified" });
+    const blocked = await BioData.countDocuments({ status: "blocked" });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayRegistered = await BioData.countDocuments({
+      createdAt: { $gte: today },
+    });
+
+    // Exam stats
+    const totalExams = await Exam.countDocuments();
+    const totalAttempts = await ExamResult.countDocuments();
+    const passCount = await ExamResult.countDocuments({ status: "Pass" });
+    const failCount = await ExamResult.countDocuments({ status: "Fail" });
+    const pendingCount = await ExamResult.countDocuments({ status: "pending" });
+
+    // Averages
+    const allResults = await ExamResult.find().select("percentage");
+    const avgScore =
+      allResults.length > 0
+        ? Math.round(
+            allResults.reduce((s, r) => s + (r.percentage || 0), 0) /
+              allResults.length,
+          )
+        : 0;
+
+    // Content
+    const totalCourses = await Course.countDocuments();
+    const totalSubjects = await Subject.countDocuments();
+    const totalLessons = await Lesson.countDocuments();
+    const totalQuestions = await Question.countDocuments();
+
+    // Support
+    const pendingTickets = await SupportTicket.countDocuments({
+      status: "pending",
+    });
+    const answeredTickets = await SupportTicket.countDocuments({
+      status: "answered",
+    });
+
+    // Reattempt
+    const pendingReattempts = await ReattemptRequest.countDocuments({
+      status: "pending",
+    });
+
+    // Certificates
+    const totalCertificates = await Certificate.countDocuments();
+    const totalTrainingCerts = await TrainingCertificate.countDocuments();
+
+    // Feedback
+    const totalFeedback = await Feedback.countDocuments();
+    const allFeedback = await Feedback.find().select("averageRating");
+    const avgFeedback =
+      allFeedback.length > 0
+        ? Number(
+            (
+              allFeedback.reduce((s, f) => s + (f.averageRating || 0), 0) /
+              allFeedback.length
+            ).toFixed(2),
+          )
+        : 0;
+
+    // Recent members (latest 5)
+    const recentMembers = await BioData.find()
+      .select("nameEnglish rollNumber zone status photo createdAt")
+      .sort({ createdAt: -1 })
+      .limit(5);
+
+    // Recent tickets (latest 3)
+    const recentTickets = await SupportTicket.find()
+      .populate("userId", "nameEnglish rollNumber")
+      .sort({ createdAt: -1 })
+      .limit(3);
+
+    // Recent reattempt requests (latest 3)
+    const recentReattempts = await ReattemptRequest.find()
+      .populate("userId", "nameEnglish rollNumber")
+      .populate("examId", "title")
+      .sort({ createdAt: -1 })
+      .limit(3);
+
+    res.json({
+      users: {
+        total: totalUsers,
+        unverified,
+        verified,
+        blocked,
+        todayRegistered,
+      },
+      exams: {
+        total: totalExams,
+        attempts: totalAttempts,
+        pass: passCount,
+        fail: failCount,
+        pending: pendingCount,
+        avgScore,
+      },
+      content: {
+        courses: totalCourses,
+        subjects: totalSubjects,
+        lessons: totalLessons,
+        questions: totalQuestions,
+      },
+      support: {
+        pending: pendingTickets,
+        answered: answeredTickets,
+      },
+      reattempts: {
+        pending: pendingReattempts,
+      },
+      certificates: {
+        completion: totalCertificates,
+        training: totalTrainingCerts,
+        total: totalCertificates + totalTrainingCerts,
+      },
+      feedback: {
+        total: totalFeedback,
+        avgRating: avgFeedback,
+      },
+      recentMembers,
+      recentTickets,
+      recentReattempts,
+    });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

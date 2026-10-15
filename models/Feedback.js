@@ -61,6 +61,13 @@ const feedbackSchema = new mongoose.Schema(
     verifiedBy: { type: String, default: "" },
     reopened: { type: String, default: "" },
 
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "BioData",
+      default: null,
+    },
+    adminReviewed: { type: Boolean, default: false },
+
     // Computed average (excludes N/A and blanks)
     averageRating: { type: Number, default: 0 },
 

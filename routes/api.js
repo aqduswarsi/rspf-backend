@@ -2538,6 +2538,28 @@ const computeAverage = (feedback) => {
   return count > 0 ? Number((sum / count).toFixed(2)) : 0;
 };
 
+const getUserFeedbackPayload = (body) => {
+  const {
+    userId,
+    adminReviewed,
+    averageRating,
+    createdBy,
+    createdAt,
+    updatedAt,
+    __v,
+    adminCategory,
+    adminPriority,
+    assignedTo,
+    actionTaken,
+    adminStatus,
+    resolutionRemarks,
+    verifiedBy,
+    reopened,
+    ...payload
+  } = body;
+  return payload;
+};
+
 router.post("/feedback", authMiddleware, async (req, res) => {
   try {
     const avg = computeAverage(req.body);
@@ -2590,6 +2612,94 @@ router.delete("/feedback/:id", authMiddleware, async (req, res) => {
   try {
     const data = await Feedback.findByIdAndDelete(req.params.id);
     if (!data) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Feedback deleted" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//              USER FEEDBACK (own submissions)
+// =========================================================
+
+// USER: create own feedback
+router.post("/user/feedback", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user")
+      return res.status(403).json({ message: "Users only" });
+
+    const feedbackPayload = getUserFeedbackPayload(req.body);
+    const avg = computeAverage(feedbackPayload);
+    const data = await Feedback.create({
+      ...feedbackPayload,
+      userId: req.user.userId,
+      averageRating: avg,
+      createdBy: req.user.email || "user",
+    });
+    res.status(201).json({ message: "Feedback submitted successfully", data });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// USER: list own feedbacks
+router.get("/user/feedback", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user")
+      return res.status(403).json({ message: "Users only" });
+
+    const data = await Feedback.find({ userId: req.user.userId }).sort({
+      createdAt: -1,
+    });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// USER: update own feedback
+router.put("/user/feedback/:id", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user")
+      return res.status(403).json({ message: "Users only" });
+
+    const existing = await Feedback.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    if (existing.userId?.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not your feedback" });
+    }
+
+    const feedbackPayload = getUserFeedbackPayload(req.body);
+    const avg = computeAverage({
+      ...existing.toObject(),
+      ...feedbackPayload,
+    });
+    const data = await Feedback.findByIdAndUpdate(
+      req.params.id,
+      { ...feedbackPayload, averageRating: avg },
+      { new: true, runValidators: true }
+    );
+    res.json({ message: "Feedback updated successfully", data });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// USER: delete own feedback
+router.delete("/user/feedback/:id", authMiddleware, async (req, res) => {
+  try {
+    if (req.user.role !== "user")
+      return res.status(403).json({ message: "Users only" });
+
+    const existing = await Feedback.findById(req.params.id);
+    if (!existing) return res.status(404).json({ message: "Not found" });
+
+    if (existing.userId?.toString() !== req.user.userId) {
+      return res.status(403).json({ message: "Not your feedback" });
+    }
+
+    await Feedback.findByIdAndDelete(req.params.id);
     res.json({ message: "Feedback deleted" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });

@@ -20,6 +20,7 @@ const ReattemptRequest = require("../models/ReattemptRequest");
 const CourseProforma = require("../models/CourseProforma");
 const Certificate = require("../models/Certificate");
 const TrainingCertificate = require("../models/TrainingCertificate");
+const Feedback = require("../models/Feedback");
 
 const router = express.Router();
 
@@ -2498,6 +2499,98 @@ router.post("/training-certificates/bulk", authMiddleware, async (req, res) => {
       failed,
       data: created,
     });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  TRAINING FEEDBACK
+// =========================================================
+
+const computeAverage = (feedback) => {
+  const sections = [
+    feedback.curriculum,
+    feedback.instructorRating,
+    feedback.methodology,
+    feedback.classroom,
+    feedback.barrack,
+    feedback.food,
+    feedback.hygiene,
+    feedback.online,
+    feedback.physical,
+    feedback.women,
+    feedback.discipline,
+    feedback.learning,
+  ];
+  let sum = 0;
+  let count = 0;
+  sections.forEach((sec) => {
+    if (!sec) return;
+    Object.values(sec).forEach((v) => {
+      const num = parseInt(v, 10);
+      if (!isNaN(num) && num >= 1 && num <= 5) {
+        sum += num;
+        count++;
+      }
+    });
+  });
+  return count > 0 ? Number((sum / count).toFixed(2)) : 0;
+};
+
+router.post("/feedback", authMiddleware, async (req, res) => {
+  try {
+    const avg = computeAverage(req.body);
+    const data = await Feedback.create({
+      ...req.body,
+      averageRating: avg,
+      createdBy: req.user.email || "admin",
+    });
+    res.status(201).json({ message: "Feedback submitted successfully", data });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.get("/feedback", authMiddleware, async (req, res) => {
+  try {
+    const data = await Feedback.find().sort({ createdAt: -1 });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.get("/feedback/:id", authMiddleware, async (req, res) => {
+  try {
+    const data = await Feedback.findById(req.params.id);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.put("/feedback/:id", authMiddleware, async (req, res) => {
+  try {
+    const avg = computeAverage(req.body);
+    const data = await Feedback.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body, averageRating: avg },
+      { new: true }
+    );
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Feedback updated", data });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+router.delete("/feedback/:id", authMiddleware, async (req, res) => {
+  try {
+    const data = await Feedback.findByIdAndDelete(req.params.id);
+    if (!data) return res.status(404).json({ message: "Not found" });
+    res.json({ message: "Feedback deleted" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

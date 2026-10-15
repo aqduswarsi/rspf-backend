@@ -2460,4 +2460,47 @@ router.post("/translate", authMiddleware, async (req, res) => {
   }
 });
 
+// BULK CREATE
+router.post("/training-certificates/bulk", authMiddleware, async (req, res) => {
+  try {
+    const { certificates } = req.body;
+
+    if (!Array.isArray(certificates) || certificates.length === 0) {
+      return res.status(400).json({ message: "Certificates array required" });
+    }
+
+    const created = [];
+    const failed = [];
+
+    for (let i = 0; i < certificates.length; i++) {
+      const cert = certificates[i];
+      try {
+        if (!cert.traineeName || !cert.trainingCourse) {
+          failed.push({ row: i + 1, error: "Missing trainee name or course" });
+          continue;
+        }
+
+        const doc = await TrainingCertificate.create({
+          ...cert,
+          createdBy: req.user.email || "admin",
+        });
+        created.push(doc);
+      } catch (err) {
+        failed.push({ row: i + 1, error: err.message });
+      }
+    }
+
+    res.status(201).json({
+      message: `${created.length} certificates created${
+        failed.length ? `, ${failed.length} failed` : ""
+      }`,
+      created: created.length,
+      failed,
+      data: created,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
 module.exports = router;

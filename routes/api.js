@@ -2511,6 +2511,58 @@ router.post("/training-certificates/bulk", authMiddleware, async (req, res) => {
 });
 
 // =========================================================
+//              COMPLETION CERTIFICATES — BULK
+// =========================================================
+
+router.post("/certificates/bulk", authMiddleware, async (req, res) => {
+  try {
+    const { certificates, watermark, signatures } = req.body;
+
+    if (!Array.isArray(certificates) || certificates.length === 0) {
+      return res.status(400).json({ message: "Certificates array required" });
+    }
+
+    const commonWatermark = watermark || "";
+    const commonSignatures = Array.isArray(signatures) ? signatures : [];
+
+    const created = [];
+    const failed = [];
+
+    for (let i = 0; i < certificates.length; i++) {
+      const cert = certificates[i];
+      try {
+        if (!cert.name || !cert.certificateId) {
+          failed.push({ row: i + 1, error: "Missing name or certificate ID" });
+          continue;
+        }
+
+        const doc = await Certificate.create({
+          ...cert,
+          score: Number(cert.score) || 0,
+          watermark: commonWatermark,
+          signatures: commonSignatures,
+          createdBy: req.user.email || "admin",
+        });
+        created.push(doc);
+      } catch (err) {
+        failed.push({ row: i + 1, error: err.message });
+      }
+    }
+
+    res.status(201).json({
+      message: `${created.length} certificates created${
+        failed.length ? `, ${failed.length} failed` : ""
+      }`,
+      created: created.length,
+      failed,
+      data: created,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
 //                  TRAINING FEEDBACK
 // =========================================================
 

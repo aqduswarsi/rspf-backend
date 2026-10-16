@@ -5,6 +5,7 @@ const trainingCertificateSchema = new mongoose.Schema(
     certificateId: { type: String, default: "", trim: true },
     traineeName: { type: String, required: true, trim: true },
     unit: { type: String, default: "" },
+    mode: { type: String, default: "" }, // ← YE NAYI LINE
     trainingCourse: { type: String, required: true },
     grade: { type: String, default: "" },
     batch: { type: String, default: "" },

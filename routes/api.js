@@ -2464,11 +2464,15 @@ router.post("/translate", authMiddleware, async (req, res) => {
 // BULK CREATE
 router.post("/training-certificates/bulk", authMiddleware, async (req, res) => {
   try {
-    const { certificates } = req.body;
+    const { certificates, watermark, signatures } = req.body;
 
     if (!Array.isArray(certificates) || certificates.length === 0) {
       return res.status(400).json({ message: "Certificates array required" });
     }
+
+    // Signature/watermark ek hi baar aata hai — sabhi me apply karo
+    const commonWatermark = watermark || "";
+    const commonSignatures = Array.isArray(signatures) ? signatures : [];
 
     const created = [];
     const failed = [];
@@ -2483,6 +2487,8 @@ router.post("/training-certificates/bulk", authMiddleware, async (req, res) => {
 
         const doc = await TrainingCertificate.create({
           ...cert,
+          watermark: commonWatermark,
+          signatures: commonSignatures,
           createdBy: req.user.email || "admin",
         });
         created.push(doc);

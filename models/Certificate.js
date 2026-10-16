@@ -8,6 +8,19 @@ const certificateSchema = new mongoose.Schema(
     courseName: { type: String, required: true, trim: true },
     score: { type: Number, required: true },
     completedOn: { type: String, required: true },
+
+    // NAYE FIELDS
+    place: { type: String, default: "RPSF/TC/GKP" },
+    dateOfIssue: { type: String, default: "" },
+    watermark: { type: String, default: "" },
+    signatures: [
+      {
+        image: { type: String, default: "" },
+        officerName: { type: String, default: "" },
+        rank: { type: String, default: "" },
+      },
+    ],
+
     createdBy: { type: String, default: "admin" },
   },
   { timestamps: true },

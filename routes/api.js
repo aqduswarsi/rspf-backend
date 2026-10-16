@@ -2470,7 +2470,7 @@ router.post("/training-certificates/bulk", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Certificates array required" });
     }
 
-    // Signature/watermark ek hi baar aata hai — sabhi me apply karo
+    // Watermark + signatures common hain — sab certificates me apply karo
     const commonWatermark = watermark || "";
     const commonSignatures = Array.isArray(signatures) ? signatures : [];
 

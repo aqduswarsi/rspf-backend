@@ -11,6 +11,7 @@ const app = express();
 app.use(cors({ origin: "*" }));
 app.use(express.json({ limit: "5mb" })); // 📸 photo base64 ke liye limit badhaya
 
+
 // MongoDB Atlas Connect
 mongoose
   .connect(process.env.MONGO_URI)

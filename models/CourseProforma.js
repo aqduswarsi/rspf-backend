@@ -15,6 +15,7 @@ const courseProformaSchema = new mongoose.Schema(
     wr: { type: Number, default: 0 },
     cr: { type: Number, default: 0 },
     nr: { type: Number, default: 0 },
+    tc: { type: Number, default: 0 },
     nwr: { type: Number, default: 0 },
     ecr: { type: Number, default: 0 },
     scr: { type: Number, default: 0 },

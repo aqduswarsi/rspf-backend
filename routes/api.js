@@ -1627,6 +1627,7 @@ router.post("/education/exams", authMiddleware, async (req, res) => {
     const {
       title, description, courseId, subjectId,
       duration, passPercentage, questionIds,
+      startTime, endTime, // 👈 NEW
     } = req.body;
 
     if (!title || !title.trim()) {
@@ -1637,6 +1638,14 @@ router.post("/education/exams", authMiddleware, async (req, res) => {
     }
     if (!subjectId) {
       return res.status(400).json({ message: "Subject is required" });
+    }
+
+    // 👇 NEW: Time validation
+    if (!startTime || !endTime) {
+      return res.status(400).json({ message: "Start time and End time are required" });
+    }
+    if (new Date(startTime) >= new Date(endTime)) {
+      return res.status(400).json({ message: "End time must be after Start time" });
     }
 
     const course = await Course.findById(courseId);
@@ -1657,6 +1666,8 @@ router.post("/education/exams", authMiddleware, async (req, res) => {
       duration: duration || 30,
       passPercentage: passPercentage || 50,
       questionIds: Array.isArray(questionIds) ? questionIds : [],
+      startTime: new Date(startTime), // 👈 NEW
+      endTime: new Date(endTime),     // 👈 NEW
       createdBy: req.user.email || "admin",
     });
 
@@ -1716,7 +1727,10 @@ router.get("/education/exams/:id", authMiddleware, async (req, res) => {
 // ---------- ADMIN: UPDATE EXAM ----------
 router.put("/education/exams/:id", authMiddleware, async (req, res) => {
   try {
-    const { title, description, duration, passPercentage, isActive } = req.body;
+    const {
+      title, description, duration, passPercentage, isActive,
+      startTime, endTime, // 👈 NEW
+    } = req.body;
 
     const updateData = {};
     if (title !== undefined) updateData.title = title.trim();
@@ -1724,6 +1738,13 @@ router.put("/education/exams/:id", authMiddleware, async (req, res) => {
     if (duration !== undefined) updateData.duration = duration;
     if (passPercentage !== undefined) updateData.passPercentage = passPercentage;
     if (isActive !== undefined) updateData.isActive = isActive;
+    if (startTime !== undefined) updateData.startTime = new Date(startTime); // 👈 NEW
+    if (endTime !== undefined) updateData.endTime = new Date(endTime);       // 👈 NEW
+
+    // 👇 NEW: agar dono bheje gaye hain toh validate karo
+    if (startTime && endTime && new Date(startTime) >= new Date(endTime)) {
+      return res.status(400).json({ message: "End time must be after Start time" });
+    }
 
     const exam = await Exam.findByIdAndUpdate(req.params.id, updateData, { new: true })
       .populate("courseId", "name")
@@ -1734,7 +1755,7 @@ router.put("/education/exams/:id", authMiddleware, async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }
-});
+}); 
 
 // ---------- ADMIN: DELETE EXAM ----------
 router.delete("/education/exams/:id", authMiddleware, async (req, res) => {
@@ -1819,7 +1840,23 @@ router.get("/user/exams/:id", authMiddleware, async (req, res) => {
     if (!exam) return res.status(404).json({ message: "Exam not found" });
     if (!exam.isActive) return res.status(400).json({ message: "Exam is not active" });
 
-    // ✅ NEW: Already attempted check
+    // 👇 NEW: Time check (server-side security)
+    const now = new Date();
+    if (exam.startTime && now < new Date(exam.startTime)) {
+      return res.status(403).json({
+        message: "Exam abhi start nahi hua hai. Time ka intezaar karein.",
+        statusMessage: "not_started",
+        startTime: exam.startTime,
+      });
+    }
+    if (exam.endTime && now > new Date(exam.endTime)) {
+      return res.status(403).json({
+        message: "Exam ka time khatam ho gaya hai.",
+        statusMessage: "ended",
+      });
+    }
+
+    // ✅ Already attempted check
     const existingResult = await ExamResult.findOne({
       userId: req.user.userId,
       examId: exam._id,
@@ -1857,6 +1894,8 @@ router.get("/user/exams/:id", authMiddleware, async (req, res) => {
       description: exam.description,
       duration: exam.duration,
       passPercentage: exam.passPercentage,
+      startTime: exam.startTime, // 👈 NEW
+      endTime: exam.endTime,     // 👈 NEW
       courseName: exam.courseId?.name || "",
       subjectName: exam.subjectId?.name || "",
       questions: safeQuestions,
@@ -2010,14 +2049,30 @@ router.get("/user/exams", authMiddleware, async (req, res) => {
       requestMap[r.examId.toString()] = r.status;
     });
 
+    const now = new Date(); // 👈 NEW
+
     const formatted = exams.map((e, idx) => {
       const examIdStr = e._id.toString();
       const attempted = attemptedExamIds.includes(examIdStr);
       const requestStatus = requestMap[examIdStr] || null;
 
+      // 👇 NEW: purane exams ke liye fallback
+      const startTime = e.startTime ? new Date(e.startTime) : new Date(0);
+      const endTime = e.endTime ? new Date(e.endTime) : new Date(8640000000000000);
+
       let canAttempt = true;
-      if (attempted && requestStatus !== "approved") {
+      let statusMessage = "available"; // 👈 NEW
+
+      // 👇 NEW: time check pehle
+      if (now < startTime) {
         canAttempt = false;
+        statusMessage = "not_started";
+      } else if (now > endTime) {
+        canAttempt = false;
+        statusMessage = "ended";
+      } else if (attempted && requestStatus !== "approved") {
+        canAttempt = false;
+        statusMessage = "attempted";
       }
 
       return {
@@ -2030,9 +2085,12 @@ router.get("/user/exams", authMiddleware, async (req, res) => {
         questionCount: e.questionIds?.length || 0,
         courseName: e.courseId?.name || "",
         subjectName: e.subjectId?.name || "",
+        startTime: e.startTime, // 👈 NEW
+        endTime: e.endTime,     // 👈 NEW
         attempted,
         requestStatus,
         canAttempt,
+        statusMessage,          // 👈 NEW
       };
     });
 

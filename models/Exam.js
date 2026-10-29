@@ -17,6 +17,11 @@ const examSchema = new mongoose.Schema(
     duration: { type: Number, default: 30 }, // minutes
     passPercentage: { type: Number, default: 50 }, // 50%
     questionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: "Question" }],
+
+    // 👇 Naye Fields (Start & End Time)
+    startTime: { type: Date, required: true },
+    endTime: { type: Date, required: true },
+
     isActive: { type: Boolean, default: true },
     createdBy: { type: String, default: "admin" },
   },

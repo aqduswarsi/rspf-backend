@@ -21,6 +21,7 @@ const CourseProforma = require("../models/CourseProforma");
 const Certificate = require("../models/Certificate");
 const TrainingCertificate = require("../models/TrainingCertificate");
 const Feedback = require("../models/Feedback");
+const GuestLecture = require("../models/GuestLecture");
 
 const router = express.Router();
 
@@ -3021,6 +3022,58 @@ router.get("/admin/dashboard", authMiddleware, async (req, res) => {
       recentTickets,
       recentReattempts,
     });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  GUEST LECTURE ROUTES
+// =========================================================
+
+// CREATE
+router.post("/guest-lectures", authMiddleware, async (req, res) => {
+  try {
+    const data = await GuestLecture.create({
+      ...req.body,
+      createdBy: req.user.email || "admin",
+    });
+    res.status(201).json({ message: "Lecture added successfully ✅", data });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL
+router.get("/guest-lectures", authMiddleware, async (req, res) => {
+  try {
+    const data = await GuestLecture.find().sort({ date: -1 });
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE (NEW ADDED)
+router.put("/guest-lectures/:id", authMiddleware, async (req, res) => {
+  try {
+    const updated = await GuestLecture.findByIdAndUpdate(
+      req.params.id,
+      { ...req.body },
+      { new: true, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: "Lecture not found" });
+    res.json({ message: "Lecture updated successfully ✅", data: updated });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE
+router.delete("/guest-lectures/:id", authMiddleware, async (req, res) => {
+  try {
+    await GuestLecture.findByIdAndDelete(req.params.id);
+    res.json({ message: "Lecture deleted successfully ✅" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

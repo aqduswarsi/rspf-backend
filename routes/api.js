@@ -2833,27 +2833,6 @@ router.put("/user/feedback/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// USER: delete own feedback
-router.delete("/user/feedback/:id", authMiddleware, async (req, res) => {
-  try {
-    if (req.user.role !== "user")
-      return res.status(403).json({ message: "Users only" });
-
-    const existing = await Feedback.findById(req.params.id);
-    if (!existing) return res.status(404).json({ message: "Not found" });
-
-    if (existing.userId?.toString() !== req.user.userId) {
-      return res.status(403).json({ message: "Not your feedback" });
-    }
-
-    await Feedback.findByIdAndDelete(req.params.id);
-    res.json({ message: "Feedback deleted" });
-  } catch (err) {
-    res.status(500).json({ message: "Server error", error: err.message });
-  }
-});
-
-
 // -------------------- ADMIN DASBOARD ----------------
 
 router.get("/admin/dashboard", authMiddleware, async (req, res) => {

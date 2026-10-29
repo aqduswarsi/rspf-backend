@@ -4,9 +4,10 @@ const certificateSchema = new mongoose.Schema(
   {
     name: { type: String, required: true, trim: true },
     certificateId: { type: String, required: true, trim: true },
-    quizName: { type: String, required: true, trim: true },
+    quizName: { type: String, trim: true },
     courseName: { type: String, required: true, trim: true },
-    score: { type: Number, required: true },
+    score: { type: Number },
+    grade: { type: String, default: "", trim: true },
     completedOn: { type: String, required: true },
 
     // NAYE FIELDS

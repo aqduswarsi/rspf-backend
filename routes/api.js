@@ -2531,6 +2531,7 @@ router.post("/certificates/bulk", authMiddleware, async (req, res) => {
     for (let i = 0; i < certificates.length; i++) {
       const cert = certificates[i];
       try {
+        // Sirf name aur certificateId mandatory hain
         if (!cert.name || !cert.certificateId) {
           failed.push({ row: i + 1, error: "Missing name or certificate ID" });
           continue;
@@ -2538,7 +2539,9 @@ router.post("/certificates/bulk", authMiddleware, async (req, res) => {
 
         const doc = await Certificate.create({
           ...cert,
-          score: Number(cert.score) || 0,
+          score: Number(cert.score) || 0, // 👈 Khali ho toh 0
+          grade: cert.grade || "", // 👈 Khali ho toh empty
+          quizName: cert.quizName || "", // 👈 Khali ho toh empty
           watermark: commonWatermark,
           signatures: commonSignatures,
           createdBy: req.user.email || "admin",

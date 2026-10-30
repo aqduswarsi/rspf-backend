@@ -1921,19 +1921,42 @@ router.post("/user/exams/:id/submit", authMiddleware, async (req, res) => {
     const exam = await Exam.findById(req.params.id).populate("questionIds");
     if (!exam) return res.status(404).json({ message: "Exam not found" });
 
-        await ExamResult.findOneAndDelete({
-          userId: req.user.userId,
-          examId: exam._id,
-        });
+    // 🚀 BUG FIX: Pehle check karo ki result exist karta hai ya nahi
+    const existingResult = await ExamResult.findOne({
+      userId: req.user.userId,
+      examId: exam._id,
+    });
 
-        // ✅ Approved request use ho gayi — delete karo
-        await ReattemptRequest.findOneAndDelete({
-          userId: req.user.userId,
-          examId: exam._id,
-          status: "approved",
-        });
+    if (existingResult) {
+      // Agar exist karta hai, toh check karo Reattempt approved hai ya nahi
+      const approvedReattempt = await ReattemptRequest.findOne({
+        userId: req.user.userId,
+        examId: exam._id,
+        status: "approved",
+      });
 
-        const questions = exam.questionIds || [];
+      if (!approvedReattempt) {
+        // Approved nahi hai, toh submit mat karo. Duplicate block.
+        return res.status(403).json({ 
+          message: "Aapne ye exam already submit kar diya hai." 
+        });
+      }
+
+      // Agar approved hai, toh purana result delete karo (Reattempt ke liye)
+      await ExamResult.findOneAndDelete({
+        userId: req.user.userId,
+        examId: exam._id,
+      });
+
+      // Approved request use ho gayi — delete karo
+      await ReattemptRequest.findOneAndDelete({
+        userId: req.user.userId,
+        examId: exam._id,
+        status: "approved",
+      });
+    }
+
+    const questions = exam.questionIds || [];
 
     if (questions.length === 0) {
       return res.status(400).json({ message: "This exam has no questions" });

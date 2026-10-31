@@ -206,7 +206,7 @@ router.post("/users", authMiddleware, async (req, res) => {
   try {
     const bioData = await BioData.create({
       ...req.body,
-      status: "verified",          // ← Admin बनाए तो directly verified
+      status: "verified",          // ← Set to verified directly when created by an admin
       verifiedBy: req.user.email || "admin",
       verifiedAt: new Date(),
     });
@@ -368,11 +368,11 @@ router.post("/user/login", async (req, res) => {
       return res.status(403).json({ message: "Account not verified yet." });
     }
 
-    // ✅ Password check: custom password ya DOB (fallback)
+    // ✅ Password check: custom password or date of birth (fallback)
     let passwordOk = false;
 
     if (user.password && user.password.length > 0) {
-      // Custom password set hai
+      // Check whether a custom password is set
       passwordOk = await bcrypt.compare(password, user.password);
     } else {
       // Fallback: DOB (ddmmyyyy)
@@ -478,7 +478,7 @@ router.put("/user/profile", authMiddleware, async (req, res) => {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     });
 
-    // Name kabhi blank na ho
+    // Ensure the name is not blank
     if (updates.nameEnglish !== undefined && !updates.nameEnglish.trim()) {
       return res.status(400).json({ message: "Name cannot be empty" });
     }
@@ -488,7 +488,7 @@ router.put("/user/profile", authMiddleware, async (req, res) => {
       if (updates[field] && !/^\d{6}$/.test(updates[field])) {
         return res
           .status(400)
-          .json({ message: `${field} 6 digits ka hona chahiye` });
+          .json({ message: `${field} must be 6 digits` });
       }
     }
 
@@ -1416,7 +1416,7 @@ router.get("/education/exam/results/:id", authMiddleware, async (req, res) => {
   }
 });
 
-// UPDATE RESULT (Admin — Written marks दे, status बदले, printed mark करे)
+// UPDATE RESULT (Admin — enter written marks, change status, and mark as printed)
 router.put("/education/exam/results/:id", authMiddleware, async (req, res) => {
   try {
     const { answers, isPrinted } = req.body;
@@ -1698,7 +1698,7 @@ router.get("/education/exams", authMiddleware, async (req, res) => {
       .populate("subjectId", "name")
       .sort({ createdAt: -1 });
 
-    // Har exam ke saath question count bhi bhejo
+    // Include the question count with each exam
     const withCount = exams.map((e) => ({
       ...e.toObject(),
       questionCount: e.questionIds?.length || 0,
@@ -1742,7 +1742,7 @@ router.put("/education/exams/:id", authMiddleware, async (req, res) => {
     if (startTime !== undefined) updateData.startTime = new Date(startTime); // 👈 NEW
     if (endTime !== undefined) updateData.endTime = new Date(endTime);       // 👈 NEW
 
-    // 👇 NEW: agar dono bheje gaye hain toh validate karo
+    // 👇 NEW: Validate when both values are provided
     if (startTime && endTime && new Date(startTime) >= new Date(endTime)) {
       return res.status(400).json({ message: "End time must be after Start time" });
     }
@@ -1778,20 +1778,20 @@ router.post("/education/exams/:id/questions", authMiddleware, async (req, res) =
       return res.status(400).json({ message: "questionIds array required" });
     }
 
-    // Exam dhundo
+    // Find the exam
     const exam = await Exam.findById(req.params.id);
     if (!exam) return res.status(404).json({ message: "Exam not found" });
 
-    // Saare questions exist karte hain?
+    // Check whether all questions exist
     const found = await Question.find({ _id: { $in: questionIds } });
     if (found.length !== questionIds.length) {
       return res.status(400).json({ message: "Some questions not found" });
     }
 
-    // ⚠️ ZARURI: har question exam ke SAME subject ka hona chahiye
+    // ⚠️ IMPORTANT: Every question must belong to the same subject as the exam
     const examSubjectId = exam.subjectId?.toString();
     const wrongSubject = found.find((q) => {
-      // Agar question ka subject null hai (purana data) toh allow karo
+      // Allow questions with a null subject for legacy data
       if (!q.subjectId) return false;
       return q.subjectId.toString() !== examSubjectId;
     });
@@ -1799,11 +1799,11 @@ router.post("/education/exams/:id/questions", authMiddleware, async (req, res) =
     if (wrongSubject) {
       return res.status(400).json({
         message:
-          "❌ Is exam me sirf same subject ke questions attach ho sakte hain.",
+          "❌ Only questions from the same subject can be attached to this exam.",
       });
     }
 
-    // Attach karo
+    // Attach the questions
     const updated = await Exam.findByIdAndUpdate(
       req.params.id,
       { questionIds },
@@ -1845,14 +1845,14 @@ router.get("/user/exams/:id", authMiddleware, async (req, res) => {
     const now = new Date();
     if (exam.startTime && now < new Date(exam.startTime)) {
       return res.status(403).json({
-        message: "Exam abhi start nahi hua hai. Time ka intezaar karein.",
+        message: "The exam has not started yet. Please wait until it starts.",
         statusMessage: "not_started",
         startTime: exam.startTime,
       });
     }
     if (exam.endTime && now > new Date(exam.endTime)) {
       return res.status(403).json({
-        message: "Exam ka time khatam ho gaya hai.",
+        message: "The exam has ended.",
         statusMessage: "ended",
       });
     }
@@ -1873,13 +1873,13 @@ router.get("/user/exams/:id", authMiddleware, async (req, res) => {
       if (!approved) {
         return res.status(403).json({
           message:
-            "Aapne ye exam already attempt kar liya hai. Reattempt ke liye request submit karo.",
+            "You have already attempted this exam. Submit a request to retake it.",
           alreadyAttempted: true,
         });
       }
     }
 
-    // ⚠️ User ko correctAnswer mat bhejo
+    // ⚠️ Do not send correctAnswer to the user
     const safeQuestions = (exam.questionIds || []).map((q) => ({
       _id: q._id,
       question: q.question,
@@ -1921,14 +1921,14 @@ router.post("/user/exams/:id/submit", authMiddleware, async (req, res) => {
     const exam = await Exam.findById(req.params.id).populate("questionIds");
     if (!exam) return res.status(404).json({ message: "Exam not found" });
 
-    // 🚀 BUG FIX: Pehle check karo ki result exist karta hai ya nahi
+    // 🚀 BUG FIX: First check whether a result already exists
     const existingResult = await ExamResult.findOne({
       userId: req.user.userId,
       examId: exam._id,
     });
 
     if (existingResult) {
-      // Agar exist karta hai, toh check karo Reattempt approved hai ya nahi
+      // If a result exists, check whether the retake has been approved
       const approvedReattempt = await ReattemptRequest.findOne({
         userId: req.user.userId,
         examId: exam._id,
@@ -1936,19 +1936,19 @@ router.post("/user/exams/:id/submit", authMiddleware, async (req, res) => {
       });
 
       if (!approvedReattempt) {
-        // Approved nahi hai, toh submit mat karo. Duplicate block.
+        // If it has not been approved, block the duplicate submission
         return res.status(403).json({ 
-          message: "Aapne ye exam already submit kar diya hai." 
+          message: "You have already submitted this exam."
         });
       }
 
-      // Agar approved hai, toh purana result delete karo (Reattempt ke liye)
+      // If approved, delete the previous result for the retake
       await ExamResult.findOneAndDelete({
         userId: req.user.userId,
         examId: exam._id,
       });
 
-      // Approved request use ho gayi — delete karo
+      // The approved request has been used; delete it
       await ReattemptRequest.findOneAndDelete({
         userId: req.user.userId,
         examId: exam._id,
@@ -2080,14 +2080,14 @@ router.get("/user/exams", authMiddleware, async (req, res) => {
       const attempted = attemptedExamIds.includes(examIdStr);
       const requestStatus = requestMap[examIdStr] || null;
 
-      // 👇 NEW: purane exams ke liye fallback
+      // 👇 NEW: Fallback for older exams
       const startTime = e.startTime ? new Date(e.startTime) : new Date(0);
       const endTime = e.endTime ? new Date(e.endTime) : new Date(8640000000000000);
 
       let canAttempt = true;
       let statusMessage = "available"; // 👈 NEW
 
-      // 👇 NEW: time check pehle
+      // 👇 NEW: Check the time first
       if (now < startTime) {
         canAttempt = false;
         statusMessage = "not_started";
@@ -2215,7 +2215,7 @@ router.post("/user/tickets", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Question required" });
 
     const ticket = await SupportTicket.create({
-      userId: req.user.userId,        // token se
+      userId: req.user.userId,        // From the token
       question: question.trim(),
     });
 
@@ -2229,7 +2229,7 @@ router.post("/user/tickets", authMiddleware, async (req, res) => {
 //              USER REATTEMPT REQUESTS
 // =========================================================
 
-// USER: submit reattempt request
+// USER: Submit a retake request
 router.post(
   "/user/exams/:id/reattempt-request",
   authMiddleware,
@@ -2240,7 +2240,7 @@ router.post(
 
       const { reason } = req.body;
       if (!reason || !reason.trim())
-        return res.status(400).json({ message: "Reason required hai" });
+        return res.status(400).json({ message: "Reason is required" });
 
       const examId = req.params.id;
 
@@ -2252,7 +2252,7 @@ router.post(
       if (!existingResult)
         return res
           .status(400)
-          .json({ message: "Aapne ye exam attempt nahi kiya" });
+          .json({ message: "You have not attempted this exam" });
 
       // Pending request already?
       const pending = await ReattemptRequest.findOne({
@@ -2263,7 +2263,7 @@ router.post(
       if (pending)
         return res
           .status(400)
-          .json({ message: "Aapka request already pending hai" });
+          .json({ message: "Your request is already pending" });
 
       const request = await ReattemptRequest.create({
         userId: req.user.userId,
@@ -2274,7 +2274,7 @@ router.post(
 
       res
         .status(201)
-        .json({ message: "Request submit ho gaya", data: request });
+        .json({ message: "Request submitted successfully", data: request });
     } catch (err) {
       res.status(500).json({ message: "Server error", error: err.message });
     }
@@ -2552,7 +2552,7 @@ router.post("/training-certificates/bulk", authMiddleware, async (req, res) => {
       return res.status(400).json({ message: "Certificates array required" });
     }
 
-    // Watermark + signatures common hain — sab certificates me apply karo
+    // Apply the shared watermark and signatures to all certificates
     const commonWatermark = watermark || "";
     const commonSignatures = Array.isArray(signatures) ? signatures : [];
 
@@ -2613,7 +2613,7 @@ router.post("/certificates/bulk", authMiddleware, async (req, res) => {
     for (let i = 0; i < certificates.length; i++) {
       const cert = certificates[i];
       try {
-        // Sirf name aur certificateId mandatory hain
+        // Only name and certificateId are required
         if (!cert.name || !cert.certificateId) {
           failed.push({ row: i + 1, error: "Missing name or certificate ID" });
           continue;
@@ -2621,9 +2621,9 @@ router.post("/certificates/bulk", authMiddleware, async (req, res) => {
 
         const doc = await Certificate.create({
           ...cert,
-          score: Number(cert.score) || 0, // 👈 Khali ho toh 0
-          grade: cert.grade || "", // 👈 Khali ho toh empty
-          quizName: cert.quizName || "", // 👈 Khali ho toh empty
+          score: Number(cert.score) || 0, // 👈 Default to 0 when empty
+          grade: cert.grade || "", // 👈 Default to an empty string when empty
+          quizName: cert.quizName || "", // 👈 Default to an empty string when empty
           watermark: commonWatermark,
           signatures: commonSignatures,
           createdBy: req.user.email || "admin",
@@ -2919,7 +2919,7 @@ router.put("/user/feedback/:id", authMiddleware, async (req, res) => {
 
 router.get("/admin/dashboard", authMiddleware, async (req, res) => {
   try {
-    // User stats (already hai /stats me, but yahan bhi)
+    // User stats (already available in /stats, but included here as well)
     const totalUsers = await BioData.countDocuments();
     const unverified = await BioData.countDocuments({ status: "unverified" });
     const verified = await BioData.countDocuments({ status: "verified" });

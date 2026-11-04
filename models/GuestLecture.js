@@ -6,6 +6,7 @@ const guestLectureSchema = new mongoose.Schema(
     guestName: { type: String, required: true },
     designation: { type: String, required: true },
     placeOfPosting: { type: String, required: true },
+    course: { type: String, default: "" }, // 👈 नया फील्ड जोड़ा गया
     status: {
       type: String,
       enum: ["In Service", "Retired"],
@@ -17,9 +18,9 @@ const guestLectureSchema = new mongoose.Schema(
       required: true,
     },
     subject: { type: String, required: true },
-    startTime: { type: String, required: true }, // e.g. "06:00"
-    endTime: { type: String, required: true }, // e.g. "07:30"
-    signOfLecturer: { type: String, default: "" }, // base64 image ya text
+    startTime: { type: String, required: true },
+    endTime: { type: String, required: true },
+    signOfLecturer: { type: String, default: "" },
     signOfPTC: { type: String, default: "" },
     remark: {
       type: String,

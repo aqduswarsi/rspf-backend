@@ -6,7 +6,7 @@ const guestLectureSchema = new mongoose.Schema(
     guestName: { type: String, required: true },
     designation: { type: String, required: true },
     placeOfPosting: { type: String, required: true },
-    course: { type: String, default: "" }, // 👈 नया फील्ड जोड़ा गया
+    course: { type: String, default: "" },
     status: {
       type: String,
       enum: ["In Service", "Retired"],
@@ -27,6 +27,7 @@ const guestLectureSchema = new mongoose.Schema(
       enum: ["Paid", "Non-Paid"],
       required: true,
     },
+    guestHonorarium: { type: String, default: "" }, // 👈 नया फील्ड जोड़ा गया
     createdBy: { type: String, default: "admin" },
   },
   { timestamps: true },

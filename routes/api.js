@@ -22,6 +22,9 @@ const Certificate = require("../models/Certificate");
 const TrainingCertificate = require("../models/TrainingCertificate");
 const Feedback = require("../models/Feedback");
 const GuestLecture = require("../models/GuestLecture");
+const Feedback = require("../models/Feedback");
+const GuestLecture = require("../models/GuestLecture");
+const FacultyMember = require("../models/FacultyMember"); // 👈 यह नई लाइन जोड़ें
 
 const router = express.Router();
 
@@ -3097,6 +3100,97 @@ router.delete("/guest-lectures/:id", authMiddleware, async (req, res) => {
   try {
     await GuestLecture.findByIdAndDelete(req.params.id);
     res.json({ message: "Lecture deleted successfully ✅" });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// =========================================================
+//                  FACULTY MEMBER ROUTES
+// =========================================================
+
+// CREATE (Add Faculty Member)
+router.post("/faculty-members", authMiddleware, async (req, res) => {
+  try {
+    const { uimNumber } = req.body;
+
+    // Check if UIM Number is already used
+    const existing = await FacultyMember.findOne({ uimNumber: uimNumber.trim() });
+    if (existing) {
+      return res.status(400).json({ message: "This UIM Number is already in use." });
+    }
+
+    const member = await FacultyMember.create({
+      ...req.body,
+      uimNumber: uimNumber.trim(),
+      createdBy: req.user.email || "admin",
+    });
+
+    res.status(201).json({
+      message: "Faculty member added successfully ✅",
+      data: member,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// LIST ALL (Get all faculty members)
+router.get("/faculty-members", authMiddleware, async (req, res) => {
+  try {
+    const members = await FacultyMember.find().sort({ createdAt: -1 });
+    res.json(members);
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// UPDATE (Edit Faculty Member)
+router.put("/faculty-members/:id", authMiddleware, async (req, res) => {
+  try {
+    const { uimNumber } = req.body;
+
+    // Agar UIM change ho raha hai to check karo ki naya wala duplicate na ho
+    if (uimNumber) {
+      const existing = await FacultyMember.findOne({
+        uimNumber: uimNumber.trim(),
+        _id: { $ne: req.params.id },
+      });
+      if (existing) {
+        return res.status(400).json({ message: "This UIM Number is already in use by another member." });
+      }
+    }
+
+    const updateData = { ...req.body };
+    if (uimNumber) updateData.uimNumber = uimNumber.trim();
+
+    const member = await FacultyMember.findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!member) {
+      return res.status(404).json({ message: "Faculty member not found" });
+    }
+
+    res.json({
+      message: "Faculty member updated successfully ✅",
+      data: member,
+    });
+  } catch (err) {
+    res.status(500).json({ message: "Server error", error: err.message });
+  }
+});
+
+// DELETE (Remove Faculty Member)
+router.delete("/faculty-members/:id", authMiddleware, async (req, res) => {
+  try {
+    const member = await FacultyMember.findByIdAndDelete(req.params.id);
+    if (!member) {
+      return res.status(404).json({ message: "Faculty member not found" });
+    }
+    res.json({ message: "Faculty member deleted successfully ✅" });
   } catch (err) {
     res.status(500).json({ message: "Server error", error: err.message });
   }

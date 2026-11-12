@@ -22,8 +22,6 @@ const Certificate = require("../models/Certificate");
 const TrainingCertificate = require("../models/TrainingCertificate");
 const Feedback = require("../models/Feedback");
 const GuestLecture = require("../models/GuestLecture");
-const Feedback = require("../models/Feedback");
-const GuestLecture = require("../models/GuestLecture");
 const FacultyMember = require("../models/FacultyMember"); // 👈 यह नई लाइन जोड़ें
 
 const router = express.Router();
